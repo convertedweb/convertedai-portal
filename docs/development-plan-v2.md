@@ -108,8 +108,8 @@ indexeles es automatizacio tovabbra is n8n-ben fusson, a portal ezeket kezeli es
 
 - n8n: Telnyx-muveletek, agent-provisioning, dokumentumfeldolgozas, tudasbazis-indexeles,
   ertesitesek
-- Postgres: tartos portal-adatok
-- Drizzle ORM es drizzle-kit
+- Supabase Database: tartos portal-adatok, managed Postgres es alap adatbazis-szolgaltatasok
+- Supabase Auth/Storage csak ott, ahol a portalnak gyorsan hasznos; az autentikacios es storage-interfesz legyen cserelheto
 - Auth.js v5 magic linkes belepessel
 - nodemailer SMTP-n keresztul csak a magic linkhez
 - fajlok szerveroldali lemezen, Docker volumekent (`/data/uploads`)
@@ -127,7 +127,7 @@ Cel: elindithato projekt, amelyre biztonsagosan lehet epiteni.
 Feladatok:
 
 - Next.js projekt es Docker Compose setup.
-- Postgres kapcsolat es Drizzle konfiguracio.
+- Supabase projekt, kornyezeti valtozok es adatbazis-kapcsolat beallitasa.
 - Auth.js magic linkes belepes.
 - Alap tenant-ellenorzes: csak a bejelentkezett felhasznalo sajat adatai erhetoek el.
 - Portal layout: fejlec, navigacio, felhasznaloi menu, ures allapotok.
@@ -282,7 +282,7 @@ Feladatok:
 
 ## 6. Minimalis adatmodell
 
-Az adatmodell mar a Fazis 0-1-ben felkeszul a kesobbi agent-epito retegre, hogy ne kelljen
+Az adatmodell Supabase Database-re epul, es mar a Fazis 0-1-ben felkeszul a kesobbi agent-epito retegre, hogy ne kelljen
 migralni:
 
 ~~~text

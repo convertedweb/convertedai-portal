@@ -121,7 +121,7 @@ Az issue tartalmazza:
 ## Elso backlog
 
 - [ ] Portal foundation: Next.js es Docker setup
-- [ ] Portal foundation: Postgres es Drizzle schema
+- [ ] Portal foundation: Supabase Database schema es kapcsolat
 - [ ] Portal foundation: Auth.js magic link
 - [ ] Portal foundation: `requireSession` es `requireOrgAccess`
 - [ ] Pilot dashboard: projektlista

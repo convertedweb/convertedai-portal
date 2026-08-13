@@ -80,8 +80,8 @@ Csak a pilot sikeres validacioja utan jon az iranyitott agent-beallitasi kerdoiv
 ### Backend es workflow
 
 - n8n: Telnyx-muveletek, agent-provisioning, dokumentumfeldolgozas, tudasbazis-indexeles, ertesitesek
-- Postgres: tartos portal-adatok
-- Drizzle ORM es drizzle-kit
+- Supabase Database: tartos portal-adatok es managed Postgres
+- Supabase kliens/server integration; az adatbazis-hozzaferes legyen szerveroldalon kontrollalt
 - Auth.js v5 magic linkes belepessel
 - nodemailer SMTP-n keresztul csak a magic linkhez
 - fajlok szerveroldali lemezen, Docker volumekent (`/data/uploads`)
@@ -98,7 +98,7 @@ Cel: elindithato projekt, amelyre biztonsagosan lehet epiteni.
 Feladatok:
 
 - Next.js projekt es Docker Compose setup.
-- Postgres kapcsolat es Drizzle konfiguracio.
+- Supabase projekt, kornyezeti valtozok es adatbazis-kapcsolat beallitasa.
 - Auth.js magic linkes belepes.
 - Alap tenant-ellenorzes: csak a bejelentkezett felhasznalo sajat adatai erhetoek el.
 - Portal layout: fejlec, navigacio, felhasznaloi menu, ures allapotok.
@@ -218,7 +218,7 @@ Egyeb funkciok - tobb felhasznalo, billing, riportok, ticketing, Google-integrac
 
 ## 7. Minimalis adatmodell
 
-Az eredeti brief teljes adatmodellje kesobbi allapot. Az elso portalhoz ez a mag elegendo:
+Az eredeti brief teljes adatmodellje kesobbi allapot. Az elso portalhoz Supabase Database-ben ez a mag elegendo:
 
 ~~~text
 users
@@ -314,7 +314,7 @@ A handler ellenorizze az alairast, az idobelyeg frissesseget, az event_id egysze
 ### Munkacsomag B - Portal foundation
 
 - Next.js, TypeScript, lint, build es Docker setup.
-- Postgres, Drizzle schema es migraciok.
+- Supabase Database schema, migraciok es kornyezeti konfiguracio.
 - Auth.js magic link.
 - `requireSession` es `requireOrgAccess` guardok.
 - Portal layout, navigation, loading/error/empty state.
