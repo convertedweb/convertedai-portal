@@ -1,0 +1,51 @@
+{
+  "name": "Érdi Rózsa Nyomda – Flóra Conversation Init",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rozsa-nyomda-flora-init",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b1c2d3e4-0001-4000-8000-000000000001",
+      "name": "Webhook - Conversation Init",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Budapest' }));\nconst day = now.getDay(); // 0 = Sunday, 6 = Saturday\nconst hour = now.getHours();\nconst isWeekday = day >= 1 && day <= 5;\nconst isWithinHours = hour >= 8 && hour < 16;\nconst isBusinessHours = isWeekday && isWithinHours;\nreturn [{ json: { is_business_hours: isBusinessHours, computed_at_budapest_time: now.toISOString() } }];"
+      },
+      "id": "b1c2d3e4-0002-4000-8000-000000000002",
+      "name": "Code - Compute Business Hours",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { type: \"conversation_initiation_client_data\", dynamic_variables: { is_business_hours: $json.is_business_hours } } }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "b1c2d3e4-0003-4000-8000-000000000003",
+      "name": "Respond - Dynamic Variables",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Conversation Init": {
+      "main": [[{ "node": "Code - Compute Business Hours", "type": "main", "index": 0 }]]
+    },
+    "Code - Compute Business Hours": {
+      "main": [[{ "node": "Respond - Dynamic Variables", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
