@@ -18,4 +18,14 @@ A `supabase/migrations/0001_portal_foundation.sql` létrehozza az első domain t
 
 Belépés után minden felhasználót hozzá kell adni egy szervezethez az `org_members` táblában, különben a projektlista üres marad.
 
+### Első teszt projekt létrehozása
+
+1. Jelentkezz be egyszer a portálon magic linkkel, hogy létrejöjjön a Supabase Auth user.
+2. Nyisd meg a `supabase/seeds/first_project.sql` fájlt.
+3. Cseréld ki a `__LOGIN_EMAIL__` értéket arra az email címre, amivel beléptél.
+4. Futtasd le a fájl tartalmát a Supabase SQL Editorban.
+5. Frissítsd a `http://localhost:3000/portal/projects` oldalt.
+
+Ha minden rendben, megjelenik a `ConvertedAI Voice Agent MVP` projekt.
+
 Az anon kulcs csak kliensoldali Supabase kliens létrehozására szolgálhat. Tenant-szűrést és minden írást szerveroldali route handler vagy server action kezeljen.
