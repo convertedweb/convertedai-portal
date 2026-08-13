@@ -48,6 +48,10 @@ type DatabaseDocument = {
   processing_status: "uploaded" | "processing" | "ready" | "failed";
 };
 
+type OrganizationMember = {
+  organization_id: string;
+};
+
 function formatDate(value: string | null) {
   return value
     ? new Intl.DateTimeFormat("hu-HU", { year: "numeric", month: "long", day: "numeric" }).format(new Date(value))
@@ -76,12 +80,20 @@ export async function getProjects(): Promise<Project[]> {
   try {
     const { createClient } = await import("@/lib/supabase/server");
     const supabase = await createClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) return [];
+
+    const { data: memberships, error: membershipError } = await supabase.from("org_members").select("organization_id").eq("user_id", user.id);
+    if (membershipError || !memberships?.length) return [];
+    const organizationIds = (memberships as OrganizationMember[]).map((membership) => membership.organization_id);
+
     const [{ data: projectRows, error: projectError }, { data: documentRows, error: documentError }] = await Promise.all([
-      supabase.from("projects").select("id, name, agent_display_name, phone_number, status, updated_at").is("deleted_at", null).order("created_at", { ascending: false }),
-      supabase.from("documents").select("project_id, processing_status").is("deleted_at", null),
+      supabase.from("projects").select("id, name, agent_display_name, phone_number, status, updated_at").in("organization_id", organizationIds).is("deleted_at", null).order("created_at", { ascending: false }),
+      supabase.from("documents").select("project_id, processing_status").in("organization_id", organizationIds).is("deleted_at", null),
     ]);
 
-    if (projectError || documentError || !projectRows?.length) return mockProjects;
+    if (projectError || documentError) return [];
+    if (!projectRows?.length) return [];
     return (projectRows as DatabaseProject[]).map((project) => mapProject(project, (documentRows ?? []) as DatabaseDocument[]));
   } catch {
     return mockProjects;
