@@ -1,8 +1,9 @@
 import { ArrowRight, FileText, FolderKanban, Phone } from "lucide-react";
 import Link from "next/link";
-import { projects, statusLabels } from "@/lib/data";
+import { getProjects, statusLabels } from "@/lib/data";
 
-export default function PortalPage() {
+export default async function PortalPage() {
+  const projects = await getProjects();
   const liveCount = projects.filter((project) => project.status === "live").length;
   const readyFiles = projects.reduce((sum, project) => sum + project.documentsReady, 0);
   const allFiles = projects.reduce((sum, project) => sum + project.documents, 0);

@@ -5,7 +5,7 @@ import { getProject, statusLabels } from "@/lib/data";
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const project = getProject(id);
+  const project = await getProject(id);
   if (!project) notFound();
   const completion = Math.round((project.documentsReady / project.documents) * 100);
 

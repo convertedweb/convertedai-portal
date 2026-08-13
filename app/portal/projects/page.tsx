@@ -1,8 +1,9 @@
 import { ArrowRight, FileText, Phone, Plus } from "lucide-react";
 import Link from "next/link";
-import { projects, statusLabels } from "@/lib/data";
+import { getProjects, statusLabels } from "@/lib/data";
 
-export default function ProjectsPage() {
+export default async function ProjectsPage() {
+  const projects = await getProjects();
   return (
     <section className="content">
       <div className="page-intro">
