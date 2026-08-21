@@ -1,4 +1,4 @@
-# ConvertedAI Portal - reszletes fejlesztesi roadmap
+# norpheus AI Portal - reszletes fejlesztesi roadmap
 
 ## 0. Termekstrategiai irany
 

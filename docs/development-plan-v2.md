@@ -1,4 +1,4 @@
-# ConvertedAI Portal - fokozatos fejlesztesi terv (v2)
+# norpheus AI Portal - fokozatos fejlesztesi terv (v2)
 
 ## 0. Valtozas az eredeti tervhez kepest
 

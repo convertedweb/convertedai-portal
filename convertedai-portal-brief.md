@@ -1,4 +1,4 @@
-# ConvertedAI Portal — Fejlesztői brief (Codex)
+# norpheus AI Portal — Fejlesztői brief (Codex)
 
 **v2 — önhosztolt, nulla előfizetés**
 
@@ -11,7 +11,7 @@
 
 ## 1. Kontextus
 
-A ConvertedAI managed service modellben épít és üzemeltet AI telefonos recepciós rendszereket magyar KKV-knak (fogászati rendelők, ügyvédi irodák). Az infrastruktúra (voice AI, telefónia, n8n automatizáció) a szolgáltató saját accountjaiban fut — az ügyfél csak a saját adatait (naptár, email, táblázat) tartja.
+A norpheus AI managed service modellben épít és üzemeltet AI telefonos recepciós rendszereket magyar KKV-knak (fogászati rendelők, ügyvédi irodák). Az infrastruktúra (voice AI, telefónia, n8n automatizáció) a szolgáltató saját accountjaiban fut — az ügyfél csak a saját adatait (naptár, email, táblázat) tartja.
 
 Ez az app váltja ki a jelenlegi email + táblázat alapú ügyfélkommunikációt: **egy ügyfélportál + egy minimális admin backoffice**, `ugyfel.convertedweb.com` alatt, a szolgáltató saját arculatával.
 
@@ -27,7 +27,7 @@ Az app **nem** hív voice AI vagy telefóniai API-t, és **nem** üzemelteti az 
 |---|---|
 | Framework | Next.js 15, App Router, TypeScript strict |
 | UI | Tailwind CSS + shadcn/ui, `lucide-react` ikonok |
-| DB | **Postgres 15+ — a már futó példányon, külön adatbázisban** (`convertedai_portal`) |
+| DB | **Postgres 15+ — a már futó példányon, külön adatbázisban** (`norpheus_ai_portal`) |
 | DB réteg | **Drizzle ORM + drizzle-kit** (migrációk, típusok). Ne használj Prismát, ne írj nyers SQL-t az app kódban. |
 | Auth | **Auth.js (NextAuth v5) + Drizzle adapter, Email provider (magic link)** |
 | Email küldés | `nodemailer` SMTP-n keresztül a meglévő Zoho/Google Workspace fiókkal |
@@ -272,7 +272,7 @@ create table audit_log (
 
 - **Nincs jelszó.** Auth.js Email provider, `nodemailer` SMTP-vel. Az ügyfél beírja az emailjét, kap egy belépő linket, ami 15 percig érvényes és egyszer használható (Auth.js alapértelmezés — ne írd felül lefelé).
 - **Nincs nyilvános regisztráció.** A `signIn` callback **utasítsa el** azt az emailt, amihez nincs `users` rekord vagy nincs `org_members` sor. Az admin hozza létre a felhasználót.
-- A magic link email legyen **magyar nyelvű, a ConvertedAI arculatával** — ne az Auth.js alapértelmezett angol sablonja. Egyszerű HTML, logóval, egy gombbal, plusz a nyers link szövegesen alatta.
+- A magic link email legyen **magyar nyelvű, a norpheus AI arculatával** — ne az Auth.js alapértelmezett angol sablonja. Egyszerű HTML, logóval, egy gombbal, plusz a nyers link szövegesen alatta.
 - Session: adatbázis-alapú (Drizzle adapter), 30 nap, `updateAge` 24 óra. Így az ügyfélnek ritkán kell újra bejelentkeznie — ez fontos a célközönségnél.
 - Middleware: minden `/(portal)` és `/(admin)` route mögött session ellenőrzés, `/bejelentkezes`-re irányítás `callbackUrl`-lel.
 
@@ -511,11 +511,11 @@ services:
 ### Env változók
 
 ```
-DATABASE_URL=postgres://portal:...@host:5432/convertedai_portal
+DATABASE_URL=postgres://portal:...@host:5432/norpheus_ai_portal
 AUTH_SECRET=
 AUTH_URL=https://ugyfel.convertedweb.com
 EMAIL_SERVER=smtp://user:pass@smtp.zoho.eu:587
-EMAIL_FROM="ConvertedAI <noreply@convertedweb.hu>"
+EMAIL_FROM="norpheus AI <noreply@convertedweb.hu>"
 N8N_WEBHOOK_SECRET=
 N8N_EVENTS_URL=https://app.convertedweb.com/webhook/portal-events
 UPLOAD_DIR=/data/uploads

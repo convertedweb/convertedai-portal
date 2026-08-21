@@ -8,7 +8,7 @@ A fejlesztes nyomonkovetesenek forrasa a GitHub Project legyen. A Markdown dokum
 
 Javasolt nev:
 
-`ConvertedAI Portal Roadmap`
+`norpheus AI Portal Roadmap`
 
 ### View-k
 

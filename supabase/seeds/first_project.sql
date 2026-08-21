@@ -21,7 +21,7 @@ begin
   end if;
 
   insert into organizations (name, slug, status)
-  values ('ConvertedAI Demo', 'convertedai-demo', 'active')
+  values ('norpheus AI Demo', 'norpheus-demo', 'active')
   on conflict (slug) do update
     set name = excluded.name,
         status = excluded.status,
@@ -36,8 +36,8 @@ begin
   insert into projects (organization_id, name, agent_display_name, phone_number, status)
   values (
     target_org_id,
-    'ConvertedAI Voice Agent MVP',
-    'Lili, a ConvertedAI telefonos asszisztense',
+    'norpheus AI Voice Agent MVP',
+    'Lili, a norpheus AI telefonos asszisztense',
     null,
     'building'
   )
@@ -49,7 +49,7 @@ begin
       into target_project_id
       from projects
      where organization_id = target_org_id
-       and name = 'ConvertedAI Voice Agent MVP'
+       and name = 'norpheus AI Voice Agent MVP'
        and deleted_at is null
      order by created_at desc
      limit 1;

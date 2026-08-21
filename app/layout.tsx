@@ -2,14 +2,21 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ConvertedAI Portal",
-  description: "ConvertedAI ügyfélportál",
+  title: "norpheus AI Portal",
+  description: "norpheus AI ügyfélportál",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="hu">
-      <body>{children}</body>
+    <html lang="hu" suppressHydrationWarning>
+      <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "try{document.documentElement.dataset.theme=localStorage.getItem('theme')==='light'?'light':'dark'}catch(e){}",
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

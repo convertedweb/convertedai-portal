@@ -1,13 +1,17 @@
-import { ArrowLeft, FileCheck2, FileText, Phone, Upload } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProject, statusLabels } from "@/lib/data";
+import { listElevenLabsConversations, listElevenLabsKnowledgeBaseDocuments } from "@/lib/elevenlabs";
+import { ProjectTabs } from "./project-tabs";
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const project = await getProject(id);
   if (!project) notFound();
-  const completion = Math.round((project.documentsReady / project.documents) * 100);
+  const completion = project.documents > 0 ? Math.round((project.documentsReady / project.documents) * 100) : 0;
+  const elevenLabsKnowledgeBase = await listElevenLabsKnowledgeBaseDocuments(project.elevenLabsAgentId);
+  const conversations = await listElevenLabsConversations(project.elevenLabsAgentId, project.id);
 
-  return <section className="content"><Link className="back-link" href="/portal"><ArrowLeft size={15} /> Vissza a projektekhez</Link><div className="detail-header"><div><p className="eyebrow">Projekt részletei</p><h1>{project.name}</h1><p className="detail-subtitle">{project.agentDisplayName}</p></div><div className={`status ${project.status}`}><span className="status-dot" />{statusLabels[project.status]}</div></div><div className="detail-grid"><div className="panel"><h2>Projekt áttekintése</h2><div className="overview-list"><div className="overview-row"><span className="overview-label">Telefonos asszisztens</span><span className="overview-value">{project.agentDisplayName}</span></div><div className="overview-row"><span className="overview-label">Telefonszám</span><span className="overview-value">{project.phoneNumber ?? "Folyamatban"}</span></div><div className="overview-row"><span className="overview-label">Utolsó frissítés</span><span className="overview-value">{project.updatedAt}</span></div></div><div className="notice">A projekt beállításait jelenleg a ConvertedAI csapata kezeli. A szükséges dokumentumokat itt biztonságosan feltöltheti.</div></div><div className="panel"><h2>Dokumentumok</h2><div className="overview-row"><span className="overview-label"><FileCheck2 size={15} style={{verticalAlign:"middle", marginRight:6}} />Feldolgozva</span><span className="overview-value">{project.documentsReady} / {project.documents}</span></div><div className="progress-track"><div className="progress-bar" style={{width:`${completion}%`}} /></div><p className="empty-note">A dokumentumtár és feltöltés a következő fejlesztési lépésben érkezik.</p><button className="button" disabled title="Hamarosan elérhető"><Upload size={15} /> Dokumentum feltöltése</button></div><div className="panel"><h2>Telefonos kapcsolat</h2><div className="overview-row"><span className="overview-label"><Phone size={15} style={{verticalAlign:"middle", marginRight:6}} />Kapcsolat állapota</span><span className="overview-value">{project.phoneNumber ? "Csatlakoztatva" : "Igénylés folyamatban"}</span></div><p className="empty-note">A telefonszám kezelése jelenleg a ConvertedAI csapatán keresztül történik.</p></div><div className="panel"><h2>Aktivitás</h2><p className="empty-note"><FileText size={16} style={{verticalAlign:"middle", marginRight:6}} />A hívásnapló és az automatizációs események hamarosan itt jelennek meg.</p></div></div></section>;
+  return <section className="content"><Link className="back-link" href="/portal"><ArrowLeft size={15} /> Vissza a projektekhez</Link><div className="detail-header"><div><p className="eyebrow">Projekt részletei</p><h1>{project.name}</h1><p className="detail-subtitle">{project.agentDisplayName}</p></div><div className="detail-actions"><div className={`status status-badge-readonly ${project.status}`}><span className="status-dot" />{statusLabels[project.status]}</div></div></div><ProjectTabs project={project} completion={completion} elevenLabsKnowledgeBase={elevenLabsKnowledgeBase} conversations={conversations} /></section>;
 }
