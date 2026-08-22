@@ -116,11 +116,7 @@ export function CustomerSettingsTabs({
             <div className="settings-panel-heading">
               <div><h2>Projektek</h2><p>Az ügyfélhez tartozó projektek elsődleges admin kezelése.</p></div>
             </div>
-            {canManageProjects ? (
-              <AdminCreateProjectForm customer={customer} />
-            ) : (
-              <div className="notice">Ezzel az admin szerepkörrel a projektek csak olvashatók. Új projektet csak superadmin hozhat létre.</div>
-            )}
+            {canManageProjects && <AdminCreateProjectForm customer={customer} />}
             <div className="access-row"><div><strong>Aktív projektek</strong><p>Aktív / összes projekt arány.</p></div><span className="access-status">{customer.liveProjects} / {customer.projects}</span></div>
             <div className="admin-project-list">
               {customer.projectList.length ? customer.projectList.map((project) => (

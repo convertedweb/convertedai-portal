@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { logAdminActivity } from "@/lib/activity-log";
 import { canManageProjects, getCurrentAdminAccess } from "@/lib/admin-permissions";
-import { createElevenLabsAgent, updateElevenLabsKnowledgeBaseDocument } from "@/lib/elevenlabs";
+import { createElevenLabsAgent, deleteElevenLabsConversation, updateElevenLabsKnowledgeBaseDocument } from "@/lib/elevenlabs";
 import type { GoogleAccessStatus, ProjectCategory, ProjectStatus, TelnyxStatus } from "@/lib/project-types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -756,4 +756,54 @@ export async function deleteProject(_previousState: ProjectAdminActionState, for
   revalidatePath(`/portal/agents/${projectId}`);
 
   redirect(`/admin/customers/${customerId}/edit`);
+}
+
+export async function deleteProjectConversation(_previousState: ProjectAdminActionState, formData: FormData) {
+  const conversationId = requiredText(formData.get("conversationId"));
+  const customerId = requiredText(formData.get("customerId"));
+  const projectId = requiredText(formData.get("projectId"));
+  const source = requiredText(formData.get("source"));
+
+  if (!conversationId || !customerId || !projectId) {
+    return { error: "Hiányzik a beszélgetés, projekt vagy ügyfél azonosító." };
+  }
+
+  const adminCheck = await assertSuperAdmin();
+  if ("error" in adminCheck) return { error: adminCheck.error };
+
+  const adminAccess = getAdminSupabase();
+  if ("error" in adminAccess) return { error: adminAccess.error };
+
+  const { data: project, error: projectError } = await adminAccess.adminSupabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("organization_id", customerId)
+    .is("deleted_at", null)
+    .single();
+
+  if (projectError || !project) {
+    console.error("Conversation delete project validation failed", projectError);
+    return { error: "Nem sikerült ellenőrizni, hogy a beszélgetés ehhez a projekthez tartozik." };
+  }
+
+  const result = await deleteElevenLabsConversation(conversationId);
+  if (result.error) {
+    return { error: result.error };
+  }
+
+  await logAdminActivity({
+    actorUserId: adminCheck.user.id,
+    eventType: "admin_conversation_deleted",
+    organizationId: customerId,
+    projectId,
+    title: "Beszélgetés törölve",
+    description: "A superadmin törölt egy ElevenLabs beszélgetést az aktivitásból.",
+    metadata: { conversationId },
+  });
+
+  revalidatePath(getProjectRedirect(projectId, source));
+  revalidatePath(`/portal/agents/${projectId}`);
+
+  return { success: "Beszélgetés törölve." };
 }

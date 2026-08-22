@@ -58,6 +58,11 @@ function validatePhoneFile(file: File | null) {
   return null;
 }
 
+function validateKnowledgeFile(file: File) {
+  if (file.size > 20 * 1024 * 1024) return "A tudásbázis fájlok egyenként legfeljebb 20 MB méretűek lehetnek.";
+  return null;
+}
+
 async function uploadPhoneDocument(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
@@ -102,9 +107,60 @@ async function uploadPhoneDocument(
   return null;
 }
 
+async function uploadProjectDocument(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  projectId: string,
+  file: File,
+  category: string,
+  folder = "knowledge",
+) {
+  const safeName = sanitizeFileName(file.name);
+  const storagePath = `${projectId}/${folder}/${Date.now()}-${safeName}`;
+  const contentType = file.type || "application/octet-stream";
+
+  const { error: uploadError } = await supabase.storage
+    .from("knowledge-base")
+    .upload(storagePath, file, {
+      contentType,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    console.error("Project creation document upload failed", uploadError);
+    return "Nem sikerült feltölteni a fájlt. Ellenőrizd a fájltípust és próbáld újra.";
+  }
+
+  const { error: documentError } = await supabase
+    .from("documents")
+    .insert({
+      organization_id: organizationId,
+      project_id: projectId,
+      category,
+      file_name: file.name,
+      storage_path: storagePath,
+      mime_type: contentType,
+      size_bytes: file.size,
+      processing_status: "uploaded",
+    });
+
+  if (documentError) {
+    console.error("Project creation document insert failed", documentError);
+    return "A fájl feltöltődött, de a dokumentum rekord mentése nem sikerült.";
+  }
+
+  return null;
+}
+
 export async function createProject(_previousState: CreateProjectState, formData: FormData) {
   const projectName = requiredText(formData.get("projectName"));
   const agentName = requiredText(formData.get("agentName"));
+  const agentLanguage = requiredText(formData.get("agentLanguage")) || "hu";
+  const agentStyle = requiredText(formData.get("agentStyle")) || "receptionist";
+  const agentTone = requiredText(formData.get("agentTone")) || "friendly";
+  const greeting = requiredText(formData.get("greeting"));
+  const callInstructions = requiredText(formData.get("callInstructions"));
+  const handoffInstructions = requiredText(formData.get("handoffInstructions"));
   const category = parseCategory(formData.get("category"));
   const phonePreference = requiredText(formData.get("phonePreference"));
   const googleAccountEmail = requiredText(formData.get("googleAccountEmail"));
@@ -117,10 +173,23 @@ export async function createProject(_previousState: CreateProjectState, formData
   const companyRegistrationFile = getUploadFile(formData, "phoneCompanyRegistration");
   const utilityBillFile = getUploadFile(formData, "phoneUtilityBill");
   const idCopyFile = getUploadFile(formData, "phoneIdCopy");
+  const promptInstructionsFile = getUploadFile(formData, "promptInstructionsFile");
+  const handoffInstructionsFile = getUploadFile(formData, "handoffInstructionsFile");
+  const knowledgeFiles = formData
+    .getAll("knowledgeFiles")
+    .filter((file): file is File => file instanceof File && file.size > 0);
 
   if (!projectName || (requiresAgentName && !agentName)) {
     return { error: requiresAgentName ? "Adja meg a projekt nevét és a megjelenített nevet." : "Adja meg a projekt nevét." };
   }
+
+  const knowledgeFileError = knowledgeFiles.map(validateKnowledgeFile).find(Boolean);
+  if (knowledgeFileError) return { error: knowledgeFileError };
+  const promptFileError = [promptInstructionsFile, handoffInstructionsFile]
+    .filter((file): file is File => Boolean(file))
+    .map(validateKnowledgeFile)
+    .find(Boolean);
+  if (promptFileError) return { error: promptFileError };
 
   if (wantsLocalPhone) {
     const requiredFiles = phonePreference === "local_company"
@@ -189,6 +258,12 @@ export async function createProject(_previousState: CreateProjectState, formData
       google_password_share_url: wantsGoogleAccess ? parsedGooglePasswordShareUrl : null,
       google_access_confirmed: wantsGoogleAccess,
       google_access_status: wantsGoogleAccess ? "submitted" : "not_provided",
+      agent_language: agentLanguage,
+      agent_style: agentStyle,
+      agent_tone: agentTone,
+      greeting,
+      call_instructions: callInstructions,
+      handoff_instructions: handoffInstructions,
       telnyx_status: category === "voice_agent" ? "requested" : "pending",
       status: "draft",
     })
@@ -223,6 +298,21 @@ export async function createProject(_previousState: CreateProjectState, formData
     }
   }
 
+  for (const file of knowledgeFiles) {
+    const uploadError = await uploadProjectDocument(supabase, membership.organization_id, project.id, file, "knowledge_base", "knowledge");
+    if (uploadError) return { error: uploadError };
+  }
+
+  if (promptInstructionsFile) {
+    const uploadError = await uploadProjectDocument(supabase, membership.organization_id, project.id, promptInstructionsFile, "prompt_instructions", "prompt");
+    if (uploadError) return { error: uploadError };
+  }
+
+  if (handoffInstructionsFile) {
+    const uploadError = await uploadProjectDocument(supabase, membership.organization_id, project.id, handoffInstructionsFile, "prompt_handoff", "prompt");
+    if (uploadError) return { error: uploadError };
+  }
+
   await logCustomerActivity({
     eventType: "project_created",
     organizationId: membership.organization_id,
@@ -232,6 +322,11 @@ export async function createProject(_previousState: CreateProjectState, formData
     description: fullProjectName,
     metadata: {
       category,
+      agentLanguage,
+      agentStyle,
+      agentTone,
+      promptSourceFiles: Number(Boolean(promptInstructionsFile)) + Number(Boolean(handoffInstructionsFile)),
+      knowledgeFiles: knowledgeFiles.length,
       phoneRequestType,
       wantsGoogleAccess,
     },

@@ -1,15 +1,16 @@
 "use client";
 
-import { AlertCircle, BellRing, Bot, CalendarClock, CheckCircle2, Clock3, ExternalLink, FileCheck2, FileText, FolderKanban, KeyRound, Layers3, LinkIcon, Mail, MessageSquareText, Pencil, Phone, PlayCircle, Save, Settings2, TriangleAlert, Upload } from "lucide-react";
+import { AlertCircle, BellRing, Bot, CalendarClock, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, FileCheck2, FileText, FolderKanban, KeyRound, Layers3, LinkIcon, Mail, MessageSquareText, Pencil, Phone, PlayCircle, Save, Settings2, Trash2, TriangleAlert, Upload } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ElevenLabsAgentWidget } from "@/app/elevenlabs-agent-widget";
 import { categoryLabels, documentStatusLabels, googleAccessStatusLabels, phoneRequestLabels, statusLabels, telnyxStatusLabels, type DocumentProcessingStatus, type Project } from "@/lib/project-types";
 import type { ElevenLabsConversation, ElevenLabsKnowledgeBaseDocument } from "@/lib/elevenlabs";
-import { provisionElevenLabsAgent, updateAgentKnowledgeBaseDocument as updateAdminAgentKnowledgeBaseDocument, updateElevenLabsAgentId, updateProjectAssetFlags, updateProjectGoogleAccess, updateProjectMinuteLimits, updateProjectPhone, updateProjectSettings, type ProjectAdminActionState } from "@/app/admin/projects/[id]/actions";
+import { deleteProjectConversation, provisionElevenLabsAgent, updateAgentKnowledgeBaseDocument as updateAdminAgentKnowledgeBaseDocument, updateElevenLabsAgentId, updateProjectAssetFlags, updateProjectGoogleAccess, updateProjectMinuteLimits, updateProjectPhone, updateProjectSettings, type ProjectAdminActionState } from "@/app/admin/projects/[id]/actions";
 import { submitProjectForReview, updateAgentKnowledgeBaseDocument as updateCustomerAgentKnowledgeBaseDocument, updateVoiceAgentSetup, uploadKnowledgeDocument, type AgentKnowledgeUpdateState, type KnowledgeUploadState, type ReviewRequestState, type VoiceSetupState } from "./actions";
 
-type TabId = "project-settings" | "setup" | "documents" | "phone" | "google-access" | "usage" | "activity";
+type TabId = "project-settings" | "setup" | "documents" | "phone" | "google-access" | "usage" | "activity" | "live-agent";
 
 type Tab = {
   id: TabId;
@@ -35,9 +36,11 @@ const minuteLimitsInitialState: ProjectAdminActionState = {};
 const elevenLabsInitialState: ProjectAdminActionState = {};
 const elevenLabsIdInitialState: ProjectAdminActionState = {};
 const agentKnowledgeInitialState: ProjectAdminActionState = {};
+const deleteConversationInitialState: ProjectAdminActionState = {};
 const customerAgentKnowledgeInitialState: AgentKnowledgeUpdateState = {};
 const reviewRequestInitialState: ReviewRequestState = {};
 const conversationsPerPage = 10;
+const calendarWeekdays = ["H", "K", "Sz", "Cs", "P", "Sz", "V"];
 
 const phoneDocumentLabels = {
   phone_id_copy: "Igazolvány másolat",
@@ -64,6 +67,120 @@ function formatMinuteValue(seconds: number) {
   if (minutes < 1) return "<1 perc";
   const rounded = minutes < 10 ? minutes.toFixed(1) : Math.round(minutes).toString();
   return `${rounded.replace(".", ",")} perc`;
+}
+
+function parseDateValue(value: string) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function toDateValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateFilterValue(value: string) {
+  const date = parseDateValue(value);
+  if (!date) return "éééé. hh. nn.";
+  return new Intl.DateTimeFormat("hu-HU", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+}
+
+function getCalendarGrid(viewDate: Date) {
+  const firstOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+  const mondayOffset = (firstOfMonth.getDay() + 6) % 7;
+  const firstVisibleDay = new Date(firstOfMonth);
+  firstVisibleDay.setDate(firstOfMonth.getDate() - mondayOffset);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(firstVisibleDay);
+    date.setDate(firstVisibleDay.getDate() + index);
+    return date;
+  });
+}
+
+function DateFilterPicker({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) {
+  const selectedDate = parseDateValue(value);
+  const [isOpen, setIsOpen] = useState(false);
+  const [viewDate, setViewDate] = useState(selectedDate ?? new Date());
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setViewDate(selectedDate ?? new Date());
+    }
+  }, [isOpen, value]);
+
+  const calendarDays = useMemo(() => getCalendarGrid(viewDate), [viewDate]);
+  const monthLabel = new Intl.DateTimeFormat("hu-HU", { month: "long", year: "numeric" }).format(viewDate);
+  const selectedValue = selectedDate ? toDateValue(selectedDate) : "";
+  const todayValue = toDateValue(new Date());
+
+  return (
+    <div className="conversation-filter-field date-filter-picker" ref={pickerRef}>
+      <span>{label}</span>
+      <button className={`date-filter-button ${value ? "has-value" : ""}`} onClick={() => setIsOpen((current) => !current)} type="button">
+        <span>{formatDateFilterValue(value)}</span>
+        <CalendarDays size={15} />
+      </button>
+      {isOpen && (
+        <div className="date-filter-popover">
+          <div className="date-filter-popover-header">
+            <strong>{monthLabel}</strong>
+            <div>
+              <button aria-label="Előző hónap" onClick={() => setViewDate((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} type="button"><ChevronLeft size={16} /></button>
+              <button aria-label="Következő hónap" onClick={() => setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} type="button"><ChevronRight size={16} /></button>
+            </div>
+          </div>
+          <div className="date-filter-weekdays">
+            {calendarWeekdays.map((weekday, index) => <span key={`${weekday}-${index}`}>{weekday}</span>)}
+          </div>
+          <div className="date-filter-days">
+            {calendarDays.map((date) => {
+              const dateValue = toDateValue(date);
+              const isSelected = dateValue === selectedValue;
+              const isToday = dateValue === todayValue;
+              const isMuted = date.getMonth() !== viewDate.getMonth();
+
+              return (
+                <button
+                  className={`${isSelected ? "selected" : ""} ${isToday ? "today" : ""} ${isMuted ? "muted" : ""}`}
+                  key={dateValue}
+                  onClick={() => {
+                    onChange(dateValue);
+                    setIsOpen(false);
+                  }}
+                  type="button"
+                >
+                  {date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+          <div className="date-filter-popover-actions">
+            <button onClick={() => { onChange(""); setIsOpen(false); }} type="button">Törlés</button>
+            <button onClick={() => { onChange(todayValue); setIsOpen(false); }} type="button">Ma</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function getMonthKey(seconds: number) {
@@ -157,6 +274,7 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
     ...(isAdminView ? [{ id: "phone" as const, label: "Telefon" }] : []),
     { id: "usage" as const, label: "Forgalom" },
     { id: "activity" as const, label: "Aktivitás" },
+    ...(!isAdminView ? [{ id: "live-agent" as const, label: "Élő agent" }] : []),
   ], [isAdminView]);
   const searchParams = useSearchParams();
   const getInitialTab = () => {
@@ -184,6 +302,7 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
   const [elevenLabsState, elevenLabsAction, elevenLabsPending] = useActionState<ProjectAdminActionState, FormData>(provisionElevenLabsAgent, elevenLabsInitialState);
   const [elevenLabsIdState, elevenLabsIdAction, elevenLabsIdPending] = useActionState<ProjectAdminActionState, FormData>(updateElevenLabsAgentId, elevenLabsIdInitialState);
   const [agentKnowledgeState, agentKnowledgeAction, agentKnowledgePending] = useActionState<ProjectAdminActionState, FormData>(updateAdminAgentKnowledgeBaseDocument, agentKnowledgeInitialState);
+  const [deleteConversationState, deleteConversationAction, deleteConversationPending] = useActionState<ProjectAdminActionState, FormData>(deleteProjectConversation, deleteConversationInitialState);
   const [customerAgentKnowledgeState, customerAgentKnowledgeAction, customerAgentKnowledgePending] = useActionState<AgentKnowledgeUpdateState, FormData>(updateCustomerAgentKnowledgeBaseDocument, customerAgentKnowledgeInitialState);
   const [reviewRequestState, reviewRequestAction, reviewRequestPending] = useActionState(submitProjectForReview, reviewRequestInitialState);
   const uploadFormRef = useRef<HTMLFormElement>(null);
@@ -211,6 +330,12 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
     setAgentKnowledgeConfirmOpen(false);
     router.refresh();
   }, [customerAgentKnowledgeState.success, router]);
+
+  useEffect(() => {
+    if (!deleteConversationState.success) return;
+    setSelectedConversationId(null);
+    router.refresh();
+  }, [deleteConversationState.success, router]);
 
   useEffect(() => {
     setAgentKnowledgeConfirmOpen(false);
@@ -826,17 +951,12 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                 <p>Beszélgetések, leiratok és hangfelvételek egy helyen.</p>
               </div>
               {conversations?.error && <p className="form-error">Nem sikerült beolvasni a beszélgetéseket.</p>}
+              {deleteConversationState.error && <p className="form-error">Nem sikerült törölni a beszélgetést: {deleteConversationState.error}</p>}
               {conversationItems.length ? (
                 <>
                   <div className="conversation-filters" aria-label="Beszélgetés szűrők">
-                    <label className="conversation-filter-field">
-                      <span>Dátumtól</span>
-                      <input type="date" value={conversationDateFrom} onChange={(event) => setConversationDateFrom(event.target.value)} />
-                    </label>
-                    <label className="conversation-filter-field">
-                      <span>Dátumig</span>
-                      <input type="date" value={conversationDateTo} onChange={(event) => setConversationDateTo(event.target.value)} />
-                    </label>
+                    <DateFilterPicker label="Dátumtól" value={conversationDateFrom} onChange={setConversationDateFrom} />
+                    <DateFilterPicker label="Dátumig" value={conversationDateTo} onChange={setConversationDateTo} />
                     <label className="conversation-filter-field">
                       <span>Min. hossz</span>
                       <input min="0" placeholder="mp" type="number" value={conversationMinDuration} onChange={(event) => setConversationMinDuration(event.target.value)} />
@@ -878,6 +998,27 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                           </button>
                           {selectedConversationId === conversation.conversationId && (
                             <div className="conversation-card conversation-detail-card">
+                              {canEditProject && adminSettings && (
+                                <div className="conversation-detail-actions">
+                                  <form
+                                    action={deleteConversationAction}
+                                    onSubmit={(event) => {
+                                      if (!window.confirm(`Biztosan törlöd ezt a beszélgetést?\n\n${conversation.callSummaryTitle || "Beszélgetés"}\n${conversation.startTime ?? ""}`)) {
+                                        event.preventDefault();
+                                      }
+                                    }}
+                                  >
+                                    <input name="conversationId" type="hidden" value={conversation.conversationId} />
+                                    <input name="customerId" type="hidden" value={adminSettings.customerId} />
+                                    <input name="projectId" type="hidden" value={project.id} />
+                                    <input name="source" type="hidden" value={adminSettings.source} />
+                                    <button className="danger-button compact-danger-button" disabled={deleteConversationPending} type="submit">
+                                      <Trash2 size={15} />
+                                      {deleteConversationPending ? "Törlés..." : "Beszélgetés törlése"}
+                                    </button>
+                                  </form>
+                                </div>
+                              )}
                               {conversation.transcriptSummary && <p className="conversation-summary">{conversation.transcriptSummary}</p>}
                               {conversation.audioUrl ? (
                                 <div className="conversation-audio">
@@ -925,6 +1066,20 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
               ) : (
                 <p className="empty-note"><MessageSquareText size={16} /> Még nincs megjeleníthető beszélgetés ehhez az agenthez.</p>
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "live-agent" && !isAdminView && (
+          <div className="tab-content">
+            <div className="tab-card live-agent-tab-card">
+              <div className="tab-heading live-agent-heading">
+                <h2>Próbáld ki az agentet élőben</h2>
+                <p>Itt tudod tesztelni, hogyan válaszol a voice agent a valós beszélgetésekben.</p>
+              </div>
+              <div className="live-agent-widget-wrap">
+                <ElevenLabsAgentWidget agentId={project.elevenLabsAgentId} inline />
+              </div>
             </div>
           </div>
         )}

@@ -420,3 +420,27 @@ export async function getElevenLabsConversationAudio(conversationId: string) {
     error: null,
   };
 }
+
+export async function deleteElevenLabsConversation(conversationId: string) {
+  const apiKey = getElevenLabsApiKey();
+
+  if (!apiKey) {
+    return { error: "Hiányzik az ELEVENLABS_API_KEY környezeti változó." };
+  }
+
+  const response = await fetch(`https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`, {
+    cache: "no-store",
+    method: "DELETE",
+    headers: {
+      "xi-api-key": apiKey,
+    },
+  });
+
+  if (!response.ok) {
+    return {
+      error: `Beszélgetés törlése sikertelen: ${response.status} ${response.statusText}`,
+    };
+  }
+
+  return { error: null };
+}
