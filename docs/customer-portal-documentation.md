@@ -1,9 +1,9 @@
 ---
 title: "norpheus AI ugyfelportal dokumentacio"
 audience: "ugyfel, szerzodes, tudasbazis, atadas"
-version: "0.1"
+version: "0.2"
 status: "elo fejlesztes alatt"
-last_updated: "2026-08-21"
+last_updated: "2026-08-22"
 source: "norpheus AI portal MVP"
 ---
 
@@ -22,6 +22,13 @@ A portal jelenlegi szerepe:
 - telefonszam igeny rogzitese projekt letrehozaskor;
 - telefonszamhoz szukseges dokumentumok feltoltese;
 - tudasbazis dokumentumok feltoltese;
+- agent tudasbazis fajlok megtekintese es szerkesztese;
+- elo voice agent tesztelese a projektoldalon;
+- hivasok, beszelgetesek, leiratok es hangfelvetelek megtekintese;
+- forgalmi/perchasznalati adatok megtekintese;
+- tamogatasi uzenetek kuldese es valaszok kezelese;
+- tamogatasi uzenetek e-mail ertesitese;
+- oldalvaltas kozbeni betoltesjelzo;
 - projekt reszletek es allapotok kovetese.
 
 ## 2. Belepes es hozzaferes
@@ -43,6 +50,9 @@ Kapcsolodo oldalak:
 - `/portal/projects/new`
 - `/portal/agents/[id]`
 - `/portal/settings`
+- `/portal/support`
+- `/portal/tasks`
+- `/portal/phone-numbers`
 
 ## 3. Ugyfeloldali navigacio
 
@@ -50,11 +60,19 @@ A portal bal oldali navigacioban az alabbi fo menupontok szerepelnek:
 
 - Attekintes
 - Voice agentek
-- Tudasbazis
 - Telefonszamok
+- Tamogatas
+- Tudasbazis
 - Integraciok
 
-A jelenlegi MVP-ben a Voice agentek es az Attekintes a legfontosabb aktiv feluletek. A Tudasbazis, Telefonszamok es Integraciok menu jelenleg a projektfolyamat kesobbi boviteseinek helye.
+A jelenlegi MVP-ben az Attekintes, Voice agentek, Telefonszamok es Tamogatas aktiv feluletek. A Tudasbazis es Integraciok menu jelenleg a projektfolyamat kesobbi boviteseinek helye.
+
+A bal oldali icon railben:
+
+- harang ikon jelzi a teendoket es nyitott tamogatasi uzeneteket;
+- light/dark mode valto;
+- beallitasok;
+- kijelentkezes.
 
 ## 4. Attekintes oldal
 
@@ -125,20 +143,43 @@ Az ugyfel a letrehozasnal csak a projekt sajat nevet adja meg. A cegnev elotagot
 
 A voice agent letrehozas jelenlegi lepesei:
 
-1. Agent alapok
-2. Telefonos kapcsolat
-3. Voice agent inditasa
+1. Projekt neve
+2. Agent alapok
+3. Telefonos kapcsolat
+4. Google hozzaferes
+5. Voice agent inditasa
 
-### 8.1 Agent alapok
+Ha a letrehozas kategorias oldalrol indul, peldaul a Voice agentek oldalrol az `Uj voice agent` gombbal, akkor nincs nulladik kategoria valaszto lepes. Ilyenkor az elso lepes rogton a projektnev megadasa.
 
-Az ugyfel megadja:
+### 8.1 Projekt neve
 
-- projekt neve;
-- agent megjelenitett neve.
+Az ugyfel itt adja meg a projekt sajat nevet. A cegnev elotagot a rendszer automatikusan ele teszi.
 
-A projekt nev mezoben a cegnev fix elotagkent jelenik meg.
+Pelda:
 
-### 8.2 Telefonos kapcsolat
+`Erd Digital - Recepcio`
+
+### 8.2 Agent alapok
+
+Az ugyfel itt adja meg az agent mukodesenek alapadatait:
+
+- agent megjelenitett neve;
+- nyelv dropdownbol;
+- stilus dropdownbol;
+- hangnem dropdownbol;
+- koszontes;
+- alap instrukciok;
+- atadas / eszkalacio;
+- tudasbazis fajlok.
+
+Az alap instrukciok es az atadas / eszkalacio ket modon adhato meg:
+
+- szoveges mezoben;
+- fajl feltoltesevel.
+
+A tudasbazis fajloknal tobb fajl is feltoltheto. Ezekbol kesobb agent tudasbazis keszul.
+
+### 8.3 Telefonos kapcsolat
 
 A telefonszam valasztas csak az uj voice agent letrehozasakor tortenik. Mar letrehozott projekt oldalan az ugyfel nem valaszt ujra telefonszam tipust.
 
@@ -174,7 +215,23 @@ Tamogatott fajltipusok:
 - PNG;
 - WEBP.
 
-### 8.3 Voice agent inditasa
+### 8.4 Google hozzaferes
+
+A Google hozzaferes csak akkor kotelezo, ha ezt az admin a projektnel bekapcsolta.
+
+Az ugyfel itt megadhatja:
+
+- technikai Google fiok e-mail cimet;
+- a hozzafereshez kapcsolodo megjegyzest;
+- hogy kesobb adja meg a hozzaferest.
+
+Javasolt mukodes:
+
+- kulon technikai Google fiok hasznalata;
+- nem szemelyes postafiok megadasa;
+- csak a projekthez szukseges hozzaferesek hasznalata.
+
+### 8.5 Voice agent inditasa
 
 Az utolso lepes egy kartyas osszefoglalo oldal. Nem lista nezetet hasznal, hanem scorecard jellegu osszegzest.
 
@@ -183,7 +240,9 @@ Megjelenitett adatok:
 - projekt;
 - kategoria;
 - agent neve;
-- telefonos kapcsolat.
+- telefonos kapcsolat;
+- Google hozzaferes allapota;
+- tudasbazis es instrukciok allapota.
 
 A letrehozas utan a projekt elokeszites alatt allapotba kerul.
 
@@ -196,7 +255,9 @@ Tabok:
 - Projekt reszletek;
 - Agent beallitasok;
 - Tudasbazis;
-- Aktivitas.
+- Forgalom;
+- Aktivitas;
+- Elo agent.
 
 Fontos: ugyfeloldalon nincs kulon `Telefon` tab. A telefonszam a Projekt reszletek kartyan jelenik meg.
 
@@ -234,7 +295,14 @@ Ezeket jelenleg admin/superadmin kezeli.
 
 ### 9.3 Tudasbazis
 
-Az ugyfel tud tudasbazis dokumentumot feltolteni.
+A Tudasbazis tab ket belso nezetet tartalmaz:
+
+- Agent tudasbazis fajlok;
+- Forras dokumentumok.
+
+#### 9.3.1 Forras dokumentumok
+
+Az ugyfel tud tudasbazis forras dokumentumot feltolteni.
 
 Tamogatott fajltipusok:
 
@@ -256,16 +324,70 @@ A dokumentumok feldolgozasi statuszt kapnak:
 - Kesz;
 - Hibas.
 
-### 9.4 Aktivitas
+#### 9.3.2 Agent tudasbazis fajlok
 
-Az Aktivitas tab jelenleg elokeszitett hely a hivashoz es automatizacios esemenyekhez.
+Az Agent tudasbazis fajlok nezetben azok a fajlok latszanak, amelyek az eles agent tudaskeszletehez kapcsolodnak.
 
-Tervezett tartalmak:
+Funkciok:
 
-- hivasnaplo;
-- agent esemenyek;
-- automatizacios logok;
-- statuszvaltozasok.
+- agent tudasbazis fajlok listazasa;
+- kijelolt fajl szerkesztese;
+- szerkesztes mentese;
+- modositas feltoltese az agenthez kulon megerosites utan.
+
+Fontos figyelmeztetes:
+
+`Teves adat megvaltoztathatja az agent mukodeset.`
+
+A szerkeszto nem nyers HTML-nezetre epul, hanem olvashato, szerkesztheto tartalmi feluletet ad.
+
+### 9.4 Forgalom
+
+A Forgalom tab az agent hasznalati es percalapu adatait mutatja.
+
+Megjelenitett adatok:
+
+- havi keret;
+- atviheto percek;
+- eddig felhasznalt percek;
+- elerheto maradek;
+- havi bontasu forgalom;
+- grafikonos megjelenites.
+
+Az ugyfel oldalon ezek csak olvashato adatok. A havi keretet es az atviheto perceket admin/superadmin kezeli.
+
+### 9.5 Aktivitas
+
+Az Aktivitas tab a beszelgetesek, leiratok es hangfelvetelek helye.
+
+Megjelenitett tartalmak:
+
+- beszelgetesek listaja;
+- datum szerinti szures;
+- beszelgetes hossza szerinti szures;
+- 10 elemes lapozas;
+- egy beszelgetes lenyitasa accordion nezetben;
+- hanglejatszas;
+- leirat megtekintese;
+- beszelo szerepek elkulonitese.
+
+Ha egy beszelgetes lenyilik, egy masik lenyitasa bezarja az elozo nezetet.
+
+### 9.6 Elo agent
+
+Az Elo agent tab csak ugyfeloldalon jelenik meg, ha a projekthez van kapcsolt ElevenLabs agent azonosito.
+
+Celja:
+
+- az ugyfel eloben kiprobalhassa a voice agentet;
+- ne kelljen kulon ElevenLabs feluletre lepni;
+- a teszteles a projekt reszletein belul tortenjen.
+
+Megjelenitett szoveg:
+
+`Probald ki az agentet eloben`
+
+A widget beagyazott dobozban jelenik meg a projektoldalon.
 
 ## 10. Ugyfel beallitasok oldal
 
@@ -280,7 +402,87 @@ Jelenlegi tartalom:
 
 A beallitasok oldalon settings menu logika keszult: a menupontok nem anchor linkkent mukodnek, hanem a tartalomvalto reszt toltik be.
 
-## 11. Allapotok
+## 11. Telefonszamok oldal
+
+A Telefonszamok oldalon az ugyfel a letrehozott vagy projekthez rendelt telefonszamokat latja.
+
+Megjelenitett adatok:
+
+- telefonszam;
+- projekt neve;
+- statusz.
+
+Az agent neve ezen a listan nem jelenik meg.
+
+## 12. Tamogatas es uzenetek
+
+A Tamogatas menupontban az ugyfel uzenetet tud kuldeni a norpheus AI csapatanak.
+
+Uj uzenet letrehozasakor megadhato:
+
+- tema;
+- kapcsolodo projekt;
+- prioritas;
+- targy;
+- uzenet.
+
+Tema opciok:
+
+- Altalanos kerdes;
+- Projekt;
+- Telefonos kapcsolat;
+- Tudasbazis;
+- Szamlazas;
+- Technikai hiba.
+
+Prioritas opciok:
+
+- Alacsony;
+- Normal;
+- Magas;
+- Surgos.
+
+A korabbi uzenetek lenyithato ticket-szalkent jelennek meg.
+
+Funkciok:
+
+- teljes uzenetelozmeny megtekintese;
+- admin es ugyfel uzenetek elkulonitese;
+- ugyfel valasz kuldese meglovo ticketre;
+- lezart ticketre mar nem kuldheto ugyfeloldali valasz;
+- ticket statusz megtekintese;
+- e-mail ertesites uj uzenetrol es valaszrol.
+
+Ticket statuszok:
+
+- Nyitott;
+- Folyamatban;
+- Megvalaszolva;
+- Lezarva.
+
+Ugyfel valasz utan a ticket automatikusan `Nyitott` statuszba kerul.
+
+## 13. Teendok es ertesitesi badge
+
+A harang ikon a portal oldali teendok es nyitott tamogatasi uzenetek osszesitett szamat mutatja.
+
+A badge jelenleg beleszamolja:
+
+- projekt beallitasi hianyossagokat;
+- nyitott vagy megvalaszolt tamogatasi uzeneteket;
+- olyan ugyeket, amelyek meg ugyfeloldali figyelmet igenyelhetnek.
+
+## 14. Oldalvaltas es betoltesjelzo
+
+A portal globalis oldalvaltas betoltesjelzot hasznal.
+
+Mukodes:
+
+- belso linkre kattintaskor felul progress bar jelenik meg;
+- rovid `Betoltes` jelzes jelenik meg spinnerrel;
+- dark es light modban is illeszkedik a felulethez.
+
+## 15. Allapotok
 
 Projekt statuszok:
 
@@ -299,7 +501,7 @@ Telnyx / telefonszam statuszok:
 - Hozza kapcsolva voice agenthez;
 - Beavatkozast igenyel.
 
-## 12. Jelenlegi adatkezeles
+## 16. Jelenlegi adatkezeles
 
 Fobb ugyfeloldali adatok:
 
@@ -310,6 +512,10 @@ Fobb ugyfeloldali adatok:
 - telefonszam igeny;
 - telefonszam dokumentumok;
 - tudasbazis dokumentumok.
+- agent tudasbazis fajlok;
+- beszelgetesek es leiratok;
+- forgalmi/perchasznalati adatok;
+- tamogatasi ticketek es uzenetek.
 
 Fontos projektmezok:
 
@@ -324,10 +530,15 @@ Fontos projektmezok:
 - `greeting`;
 - `call_instructions`;
 - `handoff_instructions`;
+- `elevenlabs_agent_id`;
+- `monthly_minute_limit`;
+- `carryover_percentage`;
+- `google_access_required`;
+- `google_access_status`;
 - `created_at`;
 - `updated_at`.
 
-## 13. Integraciok
+## 17. Integraciok
 
 Jelenleg bekotott vagy elokeszitett integraciok:
 
@@ -335,17 +546,21 @@ Jelenleg bekotott vagy elokeszitett integraciok:
 - Supabase Database;
 - Supabase Storage;
 - Telnyx adatmodell elokeszitese;
-- ElevenLabs agent letrehozas elokeszitese, meg nincs automatizalva;
+- ElevenLabs agent kapcsolat meglovo agent ID alapjan;
+- ElevenLabs tudasbazis fajlok beolvasasa es szerkesztese;
+- ElevenLabs beszelgetesek, leiratok es hangfajlok beolvasasa;
+- ElevenLabs beagyazott elo agent widget;
 - n8n backend lehetoseg a kesobbi automatizalasokhoz.
 
-## 14. Ismert korlatok es kovetkezo lepesek
+## 18. Ismert korlatok es kovetkezo lepesek
 
 Jelenlegi korlatok:
 
 - ElevenLabs agent meg nem jon letre automatikusan;
 - Telnyx szam igenyles es routing meg manualis/admin kezelesu;
-- hivashistoria es aktivitas log meg nincs bekotve;
-- tudasbazis dokumentumok feldolgozasa csak statusz szinten van elokeszitve;
+- hivasok es leiratok ElevenLabs-bol olvashatok, de automatikus uzleti elemzes meg nincs;
+- tudasbazis forrasdokumentumok feldolgozasa meg nem teljesen automatizalt;
+- ticket e-mail ertesiteshez kuldo szolgaltatas beallitasa szukseges;
 - a portal ugyfeloldali szerkesztesi jogai szandekosan szukek.
 
 Kovetkezo javasolt fejlesztesek:
@@ -353,7 +568,7 @@ Kovetkezo javasolt fejlesztesek:
 - ElevenLabs agent letrehozas automatizalasa;
 - Telnyx szam igenyles es hozzarendeles folyamat automatizalasa;
 - dokumentumfeldolgozas pipeline;
-- hivasnaplo;
-- agent tesztelesi felulet;
-- ugyfel ertesitesek.
-
+- beszelgetes leiratok elemzese;
+- nem megvalaszolt kerdesek es leggyakoribb temak kinyerese;
+- ugyfel ertesitesek;
+- megterules kalkulator.

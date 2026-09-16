@@ -1,5 +1,6 @@
 import { MessageSquarePlus } from "lucide-react";
 import { getPortalSupportTickets, supportStatusLabels, supportTopicLabels } from "@/lib/support";
+import { SupportReplyForm } from "./support-reply-form";
 import { SupportTicketForm } from "./support-ticket-form";
 
 export default async function PortalSupportPage() {
@@ -31,18 +32,34 @@ export default async function PortalSupportPage() {
         {tickets.length ? (
           <div className="support-ticket-list">
             {tickets.map((ticket) => (
-              <div className="support-ticket-row" key={ticket.id}>
-                <div className="support-ticket-icon"><MessageSquarePlus size={18} /></div>
-                <div>
-                  <strong>{ticket.subject}</strong>
-                  <span>{supportTopicLabels[ticket.topic]}{ticket.projectName ? ` · ${ticket.projectName}` : ""}</span>
-                  <p>{ticket.messagePreview}</p>
+              <details className="support-ticket-thread" key={ticket.id}>
+                <summary className="support-ticket-row">
+                  <div className="support-ticket-icon"><MessageSquarePlus size={18} /></div>
+                  <div>
+                    <strong>{ticket.subject}</strong>
+                    <span>{supportTopicLabels[ticket.topic]}{ticket.projectName ? ` · ${ticket.projectName}` : ""}</span>
+                    <p>{ticket.messagePreview}</p>
+                  </div>
+                  <div className="support-ticket-meta">
+                    <span className={`support-status ${ticket.status}`}>{supportStatusLabels[ticket.status]}</span>
+                    <small>{ticket.updatedAt}</small>
+                  </div>
+                </summary>
+                <div className="support-thread-body">
+                  <div className="support-message-list">
+                    {ticket.messages.map((message) => (
+                      <div className={`support-message ${message.authorRole}`} key={message.id}>
+                        <div>
+                          <strong>{message.authorRole === "admin" ? "norpheus AI" : "Ügyfél"}</strong>
+                          <span>{message.createdAt}</span>
+                        </div>
+                        <p>{message.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <SupportReplyForm disabled={ticket.status === "closed"} ticketId={ticket.id} />
                 </div>
-                <div className="support-ticket-meta">
-                  <span className={`support-status ${ticket.status}`}>{supportStatusLabels[ticket.status]}</span>
-                  <small>{ticket.updatedAt}</small>
-                </div>
-              </div>
+              </details>
             ))}
           </div>
         ) : (

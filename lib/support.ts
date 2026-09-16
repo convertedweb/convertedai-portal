@@ -25,6 +25,7 @@ type MessageRow = {
   ticket_id: string;
   organization_id: string;
   author_role: "client" | "admin" | "system";
+  author_user_id: string | null;
   message: string;
   created_at: string;
 };
@@ -54,6 +55,7 @@ function getPreview(message: string | null) {
 export type PortalSupportTicket = {
   id: string;
   messagePreview: string;
+  messages: SupportTicketMessage[];
   projectName: string | null;
   status: SupportTicketStatus;
   subject: string;
@@ -64,6 +66,13 @@ export type PortalSupportTicket = {
 export type AdminSupportTicket = PortalSupportTicket & {
   customerName: string;
   priority: SupportTicketPriority;
+};
+
+export type SupportTicketMessage = {
+  authorRole: "client" | "admin" | "system";
+  createdAt: string;
+  id: string;
+  message: string;
 };
 
 export async function getPortalSupportTickets(): Promise<{ tickets: PortalSupportTicket[]; projects: { id: string; name: string }[] }> {
@@ -82,7 +91,7 @@ export async function getPortalSupportTickets(): Promise<{ tickets: PortalSuppor
 
   const [{ data: ticketRows }, { data: messageRows }, { data: projectRows }] = await Promise.all([
     supabase.from("support_tickets").select("id, organization_id, project_id, created_by, subject, topic, status, priority, last_message_at, created_at, updated_at").in("organization_id", organizationIds).is("deleted_at", null).order("last_message_at", { ascending: false }),
-    supabase.from("support_ticket_messages").select("id, ticket_id, organization_id, author_role, message, created_at").in("organization_id", organizationIds).is("deleted_at", null).order("created_at", { ascending: true }),
+    supabase.from("support_ticket_messages").select("id, ticket_id, organization_id, author_role, author_user_id, message, created_at").in("organization_id", organizationIds).is("deleted_at", null).order("created_at", { ascending: true }),
     supabase.from("projects").select("id, name").in("organization_id", organizationIds).is("deleted_at", null).order("name", { ascending: true }),
   ]);
 
@@ -97,6 +106,12 @@ export async function getPortalSupportTickets(): Promise<{ tickets: PortalSuppor
     tickets: ((ticketRows ?? []) as TicketRow[]).map((ticket) => ({
       id: ticket.id,
       messagePreview: getPreview(messagesByTicket.get(ticket.id)?.[0]?.message ?? null),
+      messages: (messagesByTicket.get(ticket.id) ?? []).map((message) => ({
+        authorRole: message.author_role,
+        createdAt: formatDateTime(message.created_at),
+        id: message.id,
+        message: message.message,
+      })),
       projectName: ticket.project_id ? projectsById.get(ticket.project_id) ?? null : null,
       status: ticket.status,
       subject: ticket.subject,
@@ -106,16 +121,16 @@ export async function getPortalSupportTickets(): Promise<{ tickets: PortalSuppor
   };
 }
 
-export async function getAdminSupportTickets(): Promise<{ canView: boolean; tickets: AdminSupportTicket[]; userEmail: string | null }> {
-  const { isAdmin, userEmail } = await getAdminCustomers();
-  if (!isAdmin) return { canView: false, tickets: [], userEmail };
+export async function getAdminSupportTickets(): Promise<{ canDelete: boolean; canView: boolean; tickets: AdminSupportTicket[]; userEmail: string | null }> {
+  const { adminRole, isAdmin, userEmail } = await getAdminCustomers();
+  if (!isAdmin) return { canDelete: false, canView: false, tickets: [], userEmail };
 
   const adminSupabase = createAdminClient();
-  if (!adminSupabase) return { canView: true, tickets: [], userEmail };
+  if (!adminSupabase) return { canDelete: adminRole === "superadmin", canView: true, tickets: [], userEmail };
 
   const [{ data: ticketRows }, { data: messageRows }, { data: organizationRows }, { data: projectRows }] = await Promise.all([
     adminSupabase.from("support_tickets").select("id, organization_id, project_id, created_by, subject, topic, status, priority, last_message_at, created_at, updated_at").is("deleted_at", null).order("last_message_at", { ascending: false }),
-    adminSupabase.from("support_ticket_messages").select("id, ticket_id, organization_id, author_role, message, created_at").is("deleted_at", null).order("created_at", { ascending: true }),
+    adminSupabase.from("support_ticket_messages").select("id, ticket_id, organization_id, author_role, author_user_id, message, created_at").is("deleted_at", null).order("created_at", { ascending: true }),
     adminSupabase.from("organizations").select("id, name, company_name").is("deleted_at", null),
     adminSupabase.from("projects").select("id, name").is("deleted_at", null),
   ]);
@@ -128,11 +143,18 @@ export async function getAdminSupportTickets(): Promise<{ canView: boolean; tick
   const projectsById = new Map(((projectRows ?? []) as ProjectRow[]).map((project) => [project.id, project.name]));
 
   return {
+    canDelete: adminRole === "superadmin",
     canView: true,
     tickets: ((ticketRows ?? []) as TicketRow[]).map((ticket) => ({
       customerName: organizationsById.get(ticket.organization_id) ?? "Ismeretlen ügyfél",
       id: ticket.id,
       messagePreview: getPreview(messagesByTicket.get(ticket.id)?.[0]?.message ?? null),
+      messages: (messagesByTicket.get(ticket.id) ?? []).map((message) => ({
+        authorRole: message.author_role,
+        createdAt: formatDateTime(message.created_at),
+        id: message.id,
+        message: message.message,
+      })),
       priority: ticket.priority,
       projectName: ticket.project_id ? projectsById.get(ticket.project_id) ?? null : null,
       status: ticket.status,
@@ -142,4 +164,41 @@ export async function getAdminSupportTickets(): Promise<{ canView: boolean; tick
     })),
     userEmail,
   };
+}
+
+export async function getPortalSupportAlertCount() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || (!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY && !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
+    return 0;
+  }
+
+  const { createClient } = await import("@/lib/supabase/server");
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  const { data: memberships } = await supabase.from("org_members").select("organization_id").eq("user_id", user.id);
+  const organizationIds = (memberships ?? []).map((membership) => membership.organization_id as string);
+  if (!organizationIds.length) return 0;
+
+  const { count } = await supabase
+    .from("support_tickets")
+    .select("id", { count: "exact", head: true })
+    .in("organization_id", organizationIds)
+    .in("status", ["open", "in_progress", "resolved"])
+    .is("deleted_at", null);
+
+  return count ?? 0;
+}
+
+export async function getAdminSupportAlertCount() {
+  const adminSupabase = createAdminClient();
+  if (!adminSupabase) return 0;
+
+  const { count } = await adminSupabase
+    .from("support_tickets")
+    .select("id", { count: "exact", head: true })
+    .in("status", ["open", "in_progress"])
+    .is("deleted_at", null);
+
+  return count ?? 0;
 }

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 export function RoutePreloader() {
   const pathname = usePathname();
   const [isLoading, setIsLoading] = useState(false);
+  const startedAtRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -14,7 +15,13 @@ export function RoutePreloader() {
         clearTimeout(timeoutRef.current);
       }
 
-      timeoutRef.current = setTimeout(() => setIsLoading(false), 220);
+      const elapsed = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
+      const delay = Math.max(220, 420 - elapsed);
+
+      timeoutRef.current = setTimeout(() => {
+        startedAtRef.current = null;
+        setIsLoading(false);
+      }, delay);
     };
 
     clearLoader();
@@ -29,7 +36,7 @@ export function RoutePreloader() {
     const handleClick = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
-      const target = event.target as HTMLElement | null;
+      const target = event.target as Element | null;
       const link = target?.closest("a[href]") as HTMLAnchorElement | null;
       if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
 
@@ -37,6 +44,7 @@ export function RoutePreloader() {
       if (url.origin !== window.location.origin) return;
       if (url.pathname === window.location.pathname && url.search === window.location.search) return;
 
+      startedAtRef.current = Date.now();
       setIsLoading(true);
 
       if (timeoutRef.current) {
@@ -46,8 +54,8 @@ export function RoutePreloader() {
       timeoutRef.current = setTimeout(() => setIsLoading(false), 4500);
     };
 
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
+    document.addEventListener("click", handleClick, true);
+    return () => document.removeEventListener("click", handleClick, true);
   }, []);
 
   return (

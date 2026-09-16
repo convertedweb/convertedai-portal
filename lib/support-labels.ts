@@ -15,7 +15,7 @@ export const supportStatusLabels: Record<SupportTicketStatus, string> = {
   closed: "Lezárva",
   in_progress: "Folyamatban",
   open: "Nyitott",
-  resolved: "Megoldva",
+  resolved: "Megválaszolva",
 };
 
 export const supportPriorityLabels: Record<SupportTicketPriority, string> = {

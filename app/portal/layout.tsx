@@ -5,23 +5,25 @@ import NavLinks from "@/app/portal/nav-links";
 import { ThemeToggle } from "@/app/theme-toggle";
 import { getPortalUserSummary, getProjects } from "@/lib/data";
 import { getCurrentAdminAccess } from "@/lib/admin-permissions";
+import { getPortalSupportAlertCount } from "@/lib/support";
 import { getPortalTasks } from "@/lib/tasks";
 
 export default async function PortalLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const adminAccess = await getCurrentAdminAccess();
   if (adminAccess.role) redirect("/admin");
 
-  const [userSummary, projects] = await Promise.all([getPortalUserSummary(), getProjects()]);
+  const [userSummary, projects, supportAlertCount] = await Promise.all([getPortalUserSummary(), getProjects(), getPortalSupportAlertCount()]);
   const tasks = getPortalTasks(projects);
+  const notificationCount = tasks.length + supportAlertCount;
 
   return (
     <div className="app-shell">
       <aside className="icon-rail" aria-label="Gyors műveletek">
         <div className="rail-logo"><Sparkles size={18} /></div>
         <div className="rail-bottom">
-          <Link className="rail-button rail-notifications" aria-label={`Teendők: ${tasks.length} db`} title={`${tasks.length} teendő`} href="/portal/tasks">
+          <Link className="rail-button rail-notifications" aria-label={`Értesítések: ${notificationCount} db`} title={`${notificationCount} értesítés`} href="/portal/tasks">
             <Bell size={18} />
-            {tasks.length > 0 && <span className="rail-badge">{tasks.length > 9 ? "9+" : tasks.length}</span>}
+            {notificationCount > 0 && <span className="rail-badge">{notificationCount > 9 ? "9+" : notificationCount}</span>}
           </Link>
           <ThemeToggle />
           <Link className="rail-button" aria-label="Beállítások" title="Beállítások" href="/portal/settings"><Settings size={18} /></Link>

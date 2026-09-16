@@ -4,6 +4,7 @@ import Link from "next/link";
 import AdminNavLinks from "@/app/admin/admin-nav-links";
 import { ThemeToggle } from "@/app/theme-toggle";
 import { getAdminProjects } from "@/lib/admin-data";
+import { getAdminSupportAlertCount } from "@/lib/support";
 import { getAdminTasks } from "@/lib/tasks";
 
 export const metadata: Metadata = {
@@ -12,7 +13,9 @@ export const metadata: Metadata = {
 
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const { adminPermissions, adminRole, isAdmin, projects, userEmail, userName } = await getAdminProjects();
+  const supportAlertCount = isAdmin ? await getAdminSupportAlertCount() : 0;
   const tasks = isAdmin ? getAdminTasks(projects) : [];
+  const notificationCount = tasks.length + supportAlertCount;
   const initials = getInitials(userName);
 
   return (
@@ -20,9 +23,9 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
       <aside className="icon-rail" aria-label="Admin gyors műveletek">
         <div className="rail-logo"><Sparkles size={18} /></div>
         <div className="rail-bottom">
-          <Link className="rail-button rail-notifications" aria-label={`Teendők: ${tasks.length} db`} title={`${tasks.length} teendő`} href="/admin/tasks">
+          <Link className="rail-button rail-notifications" aria-label={`Értesítések: ${notificationCount} db`} title={`${notificationCount} értesítés`} href="/admin/tasks">
             <Bell size={18} />
-            {tasks.length > 0 && <span className="rail-badge">{tasks.length > 9 ? "9+" : tasks.length}</span>}
+            {notificationCount > 0 && <span className="rail-badge">{notificationCount > 9 ? "9+" : notificationCount}</span>}
           </Link>
           <ThemeToggle />
           <a className="rail-button" aria-label="Kijelentkezés" title="Kijelentkezés" href="/auth/signout?next=/admin"><LogOut size={18} /></a>

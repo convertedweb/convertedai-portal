@@ -4,8 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logCustomerActivity } from "@/lib/activity-log";
 import type { SupportTicketPriority, SupportTicketTopic } from "@/lib/support";
+import { notifySupportTicket } from "@/lib/support-notifications";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type CreateSupportTicketState = {
+  error?: string;
+  success?: string;
+};
+
+export type ReplySupportTicketState = {
   error?: string;
   success?: string;
 };
@@ -50,6 +57,10 @@ export async function createSupportTicket(_previousState: CreateSupportTicketSta
   }
 
   const organizationId = membership.organization_id as string;
+  const adminSupabase = createAdminClient();
+  const { data: project } = projectId && adminSupabase
+    ? await adminSupabase.from("projects").select("name").eq("id", projectId).maybeSingle()
+    : { data: null };
   const now = new Date().toISOString();
   const { data: ticket, error: ticketError } = await supabase
     .from("support_tickets")
@@ -96,8 +107,112 @@ export async function createSupportTicket(_previousState: CreateSupportTicketSta
     metadata: { priority, ticketId: ticket.id, topic },
   });
 
+  await notifySupportTicket({
+    action: "created",
+    adminSupabase,
+    customerEmail: user.email,
+    customerName: (user.user_metadata?.full_name as string | undefined) ?? (user.user_metadata?.name as string | undefined) ?? null,
+    message,
+    organizationId,
+    priority,
+    projectName: project?.name ?? null,
+    status: "open",
+    subject,
+    ticketId: ticket.id,
+    topic,
+  });
+
   revalidatePath("/portal/support");
   revalidatePath("/admin/messages");
 
   return { success: "Üzenet elküldve." };
+}
+
+export async function replySupportTicket(_previousState: ReplySupportTicketState, formData: FormData): Promise<ReplySupportTicketState> {
+  const ticketId = text(formData.get("ticketId"));
+  const message = text(formData.get("message"));
+
+  if (!ticketId || !message) {
+    return { error: "Írd be a választ." };
+  }
+
+  const { createClient } = await import("@/lib/supabase/server");
+  const supabase = await createClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) redirect("/login?next=/portal/support");
+
+  const { data: ticket, error: ticketError } = await supabase
+    .from("support_tickets")
+    .select("id, organization_id, project_id, subject, status, priority, topic")
+    .eq("id", ticketId)
+    .is("deleted_at", null)
+    .single();
+
+  if (ticketError || !ticket) {
+    return { error: "Nem található ez az üzenet." };
+  }
+
+  if (ticket.status === "closed") {
+    return { error: "Lezárt üzenethez már nem lehet válaszolni." };
+  }
+
+  const now = new Date().toISOString();
+  const { error: messageError } = await supabase
+    .from("support_ticket_messages")
+    .insert({
+      author_role: "client",
+      author_user_id: user.id,
+      message,
+      organization_id: ticket.organization_id,
+      ticket_id: ticket.id,
+    });
+
+  if (messageError) {
+    console.error("Support reply create failed", messageError);
+    return { error: "Nem sikerült elküldeni a választ." };
+  }
+
+  const adminSupabase = createAdminClient();
+  const { error: updateError } = await (adminSupabase ?? supabase)
+    .from("support_tickets")
+    .update({ last_message_at: now, status: "open", updated_at: now })
+    .eq("id", ticket.id);
+
+  if (updateError) {
+    console.error("Support ticket reply timestamp update failed", updateError);
+  }
+
+  await logCustomerActivity({
+    eventType: "support_ticket_replied",
+    organizationId: ticket.organization_id,
+    projectId: ticket.project_id,
+    supabase,
+    title: "Ügyfél válaszolt egy támogatási üzenetre",
+    description: ticket.subject,
+    metadata: { ticketId: ticket.id },
+  });
+
+  const { data: project } = ticket.project_id && adminSupabase
+    ? await adminSupabase.from("projects").select("name").eq("id", ticket.project_id).maybeSingle()
+    : { data: null };
+
+  await notifySupportTicket({
+    action: "client_replied",
+    adminSupabase,
+    customerEmail: user.email,
+    customerName: (user.user_metadata?.full_name as string | undefined) ?? (user.user_metadata?.name as string | undefined) ?? null,
+    message,
+    organizationId: ticket.organization_id,
+    priority: ticket.priority,
+    projectName: project?.name ?? null,
+    status: "open",
+    subject: ticket.subject,
+    ticketId: ticket.id,
+    topic: ticket.topic,
+  });
+
+  revalidatePath("/portal/support");
+  revalidatePath("/admin/messages");
+
+  return { success: "Válasz elküldve." };
 }
