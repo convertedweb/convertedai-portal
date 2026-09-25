@@ -49,7 +49,7 @@ Ezután a superadmin felület a `http://localhost:3000/admin` címen érhető el
 PKCE auth flow esetén ne a `{{ .ConfirmationURL }}` linket használd, mert másik böngészőben vagy frissült session után `PKCE code verifier not found in storage` hibát okozhat. A Magic Link sablonban `{{ .TokenHash }}` alapú linket használj:
 
 ```html
-<h2>Belépés a norpheus AI portálba</h2>
+<h2>Belépés az ügyfélportálba</h2>
 
 <p>Kattints az alábbi gombra a belépéshez:</p>
 
