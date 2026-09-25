@@ -2,14 +2,15 @@ import { type EmailOtpType } from "@supabase/supabase-js";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { getAuthRequestUrl, getSafeAuthRedirect } from "@/lib/auth-urls";
 
 const allowedOtpTypes = new Set(["signup", "invite", "magiclink", "recovery", "email", "email_change"]);
 
 export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
+  const requestUrl = getAuthRequestUrl(request);
   const tokenHash = requestUrl.searchParams.get("token_hash");
   const type = requestUrl.searchParams.get("type");
-  const nextUrl = getSafeRedirectUrl(requestUrl, requestUrl.searchParams.get("redirect_to") ?? requestUrl.searchParams.get("next"));
+  const nextUrl = getSafeAuthRedirect(requestUrl, requestUrl.searchParams.get("redirect_to") ?? requestUrl.searchParams.get("next"));
 
   if (!tokenHash || !type || !allowedOtpTypes.has(type)) {
     return redirectToLogin(requestUrl.origin, nextUrl.pathname, "A belépési link hiányos vagy hibás.");
@@ -41,20 +42,6 @@ export async function GET(request: Request) {
   response.headers.set("location", new URL(resolvedNext, requestUrl.origin).toString());
 
   return response;
-}
-
-function getSafeRedirectUrl(requestUrl: URL, value: string | null) {
-  if (!value) return new URL("/portal", requestUrl.origin);
-  if (value.startsWith("/")) return new URL(value, requestUrl.origin);
-
-  try {
-    const redirectUrl = new URL(value);
-    if (redirectUrl.origin === requestUrl.origin) return redirectUrl;
-  } catch {
-    return new URL("/portal", requestUrl.origin);
-  }
-
-  return new URL("/portal", requestUrl.origin);
 }
 
 function redirectToLogin(origin: string, next: string, error: string) {

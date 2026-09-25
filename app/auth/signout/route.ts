@@ -1,11 +1,13 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { getAuthRequestUrl, getSafeAuthRedirect } from "@/lib/auth-urls";
 
 export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
+  const requestUrl = getAuthRequestUrl(request);
   const requestedNext = requestUrl.searchParams.get("next");
-  const next = requestedNext?.startsWith("/") ? requestedNext : "/portal";
+  const safeNext = getSafeAuthRedirect(requestUrl, requestedNext);
+  const next = safeNext.pathname + safeNext.search;
   const cookieStore = await cookies();
   const response = NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(next)}`, requestUrl.origin));
 
