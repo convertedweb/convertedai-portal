@@ -4,11 +4,11 @@
 
 The DigitalOcean Droplet runs the ready-to-run Next.js image only. GitHub Actions builds the image and publishes it to GHCR, so the production server does not run `npm install` or `next build`.
 
-Supabase provides the database, Auth and Storage. Rackhost DNS points `portal.norpheus.hu` to the Droplet. The existing Docker Caddy terminates HTTPS and forwards requests to `portal:3000` on the external `portal-proxy` network.
+Supabase provides the database, Auth and Storage. Rackhost DNS points `portal.convertedweb.com` to the Droplet. The existing Docker Caddy terminates HTTPS and forwards requests to `portal:3000` on the external `portal-proxy` network.
 
 ## Build configuration
 
-In GitHub repository Settings > Secrets and variables > Actions > Variables, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the production project's public values. Never use the Supabase secret/service-role key here. Next.js embeds these values during build; runtime environment variables alone are insufficient. The site URL is built as `https://portal.norpheus.hu`.
+In GitHub repository Settings > Secrets and variables > Actions > Variables, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the production project's public values. Never use the Supabase secret/service-role key here. Next.js embeds these values during build; runtime environment variables alone are insufficient. The site URL is built as `https://portal.convertedweb.com`.
 
 Push the changes and wait for the container workflow to succeed before deploying. Record the full commit SHA to select a reproducible image.
 
@@ -19,7 +19,7 @@ Create `/opt/convertedai-portal/.env.production` on the Droplet:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
-NEXT_PUBLIC_SITE_URL=https://portal.norpheus.hu
+NEXT_PUBLIC_SITE_URL=https://portal.convertedweb.com
 SUPABASE_SECRET_KEY=your-server-only-key
 ELEVENLABS_API_KEY=your-elevenlabs-key
 ```
@@ -64,14 +64,14 @@ networks:
     name: portal-proxy
 ```
 
-Create `/root/smarticle/Caddyfile`, replacing the n8n placeholder with the actual existing domain:
+Create `/root/smarticle/Caddyfile` with the two production domains:
 
 ```caddyfile
-ACTUAL_N8N_DOMAIN {
+app.convertedweb.com {
   reverse_proxy n8n:5678
 }
 
-portal.norpheus.hu {
+portal.convertedweb.com {
   reverse_proxy portal:3000
 }
 ```
@@ -88,11 +88,17 @@ Recreating Caddy briefly interrupts incoming requests, including n8n. Do not run
 
 ## DNS and production login
 
+The checked-in `deploy/Caddyfile` and `deploy/docker-compose.caddy.yml` provide
+the same setup without editing the existing n8n Compose file. Install the latter
+as `/root/smarticle/docker-compose.override.yml` and the Caddyfile alongside it.
+Docker Compose automatically merges the override. The original Compose file
+and its volumes remain in place.
+
 At the authoritative DNS provider (Rackhost if its nameservers are active), create an A record: host `portal`, value the Droplet IPv4 address. Any AAAA record for this subdomain must also target this server or be removed. Caddy needs reachable TCP ports 80 and 443.
 
-In Supabase Authentication > URL Configuration, set Site URL to `https://portal.norpheus.hu` and allow `https://portal.norpheus.hu/auth/callback` and `https://portal.norpheus.hu/auth/confirm`. Preserve needed development redirects.
+In Supabase Authentication > URL Configuration, set Site URL to `https://portal.convertedweb.com` and allow `https://portal.convertedweb.com/auth/callback` and `https://portal.convertedweb.com/auth/confirm`. Preserve needed development redirects.
 
-Verify `curl --fail https://portal.norpheus.hu/api/health`, then test portal login, an admin invitation and a project view in a browser. Also check the existing n8n domain.
+Verify `curl --fail https://portal.convertedweb.com/api/health`, then test portal login, an admin invitation and a project view in a browser. Also check the existing n8n domain.
 
 ## Deploying a new version
 

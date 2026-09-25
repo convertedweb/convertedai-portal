@@ -1,0 +1,7 @@
+app.convertedweb.com {
+  reverse_proxy n8n:5678
+}
+
+portal.convertedweb.com {
+  reverse_proxy portal:3000
+}

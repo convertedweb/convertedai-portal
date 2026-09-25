@@ -1,0 +1,14 @@
+# Install as /root/smarticle/docker-compose.override.yml.
+services:
+  caddy:
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - default
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: portal-proxy
