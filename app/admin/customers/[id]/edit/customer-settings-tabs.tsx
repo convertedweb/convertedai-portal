@@ -35,11 +35,13 @@ export function CustomerSettingsTabs({
   canEditCustomer,
   canInviteCustomerUsers,
   canManageProjects,
+  isSuperadmin,
   customer,
 }: {
   canEditCustomer: boolean;
   canInviteCustomerUsers: boolean;
   canManageProjects: boolean;
+  isSuperadmin: boolean;
   customer: AdminCustomer;
 }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("basics");
@@ -70,7 +72,7 @@ export function CustomerSettingsTabs({
       <div className="settings-content">
         {activeTab === "basics" && (
           canEditCustomer ? (
-            <EditCustomerForm customer={customer} />
+            <EditCustomerForm customer={customer} isSuperadmin={isSuperadmin} />
           ) : (
             <section className="settings-panel">
               <div className="settings-panel-heading">
@@ -123,7 +125,7 @@ export function CustomerSettingsTabs({
                 <Link className="admin-project-row admin-project-row-link" href={`/admin/projects/${project.id}`} key={project.id}>
                   <div className="project-main">
                     <div className="project-title">{project.name}</div>
-                    <div className="project-agent">{categoryLabels[project.category]} · {project.agentDisplayName}</div>
+                    <div className="project-agent">{categoryLabels[project.category]}{project.category === "ui_ux_design" || project.category === "website" ? "" : ` · ${project.agentDisplayName}`}</div>
                     <div className={`status ${project.status}`}><span className="status-dot" />{statusLabels[project.status]}</div>
                   </div>
                   <div className="project-details">
@@ -151,7 +153,8 @@ function AdminCreateProjectForm({ customer }: { customer: AdminCustomer }) {
   const [category, setCategory] = useState("voice_agent");
   const [state, formAction, pending] = useActionState(createAdminProject, createProjectInitialState);
   const isVoiceAgent = category === "voice_agent";
-  const needsAgentName = category !== "automation";
+  const isDeliveryProject = category === "ui_ux_design" || category === "website";
+  const needsAgentName = category === "voice_agent" || category === "chatbot";
 
   return (
     <div className="admin-create-project">
@@ -169,6 +172,8 @@ function AdminCreateProjectForm({ customer }: { customer: AdminCustomer }) {
               <option value="voice_agent">{categoryLabels.voice_agent}</option>
               <option value="chatbot">{categoryLabels.chatbot}</option>
               <option value="automation">{categoryLabels.automation}</option>
+              <option value="ui_ux_design">{categoryLabels.ui_ux_design}</option>
+              <option value="website">{categoryLabels.website}</option>
             </select></label>
           </div>
           <div className="settings-form-grid">
@@ -203,7 +208,7 @@ function AdminCreateProjectForm({ customer }: { customer: AdminCustomer }) {
             </div>
           )}
 
-          <div className="admin-create-project-section">
+          {!isDeliveryProject && <div className="admin-create-project-section">
             <div className="admin-create-project-section-title"><KeyRound size={15} /> Google hozzáférés</div>
             <div className="settings-form-grid">
               <label className="field"><span>Google technikai fiók</span><input name="googleAccountEmail" placeholder="asszisztens@cegnev.hu" type="email" /></label>
@@ -223,7 +228,7 @@ function AdminCreateProjectForm({ customer }: { customer: AdminCustomer }) {
               </div>
               <span className="toggle"><input name="googleAccessRequired" defaultChecked type="checkbox" /><span /></span>
             </label>
-          </div>
+          </div>}
 
           <label className="field date-field"><span>Tervezett indítás</span><input name="plannedLaunchDate" type="date" /></label>
           {state.error && <p className="form-error">{state.error}</p>}

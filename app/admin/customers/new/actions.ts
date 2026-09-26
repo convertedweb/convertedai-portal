@@ -50,6 +50,7 @@ export async function createCustomer(_previousState: CreateCustomerState, formDa
   const customerName = requiredText(formData.get("customerName"));
   const companyName = requiredText(formData.get("companyName"));
   const status = parseStatus(formData.get("status"));
+  const superadminOnly = formData.get("superadminOnly") === "on";
 
   if (!customerName || !companyName) {
     return { error: "Az ügyfél neve és a cég mező kötelező." };
@@ -63,6 +64,9 @@ export async function createCustomer(_previousState: CreateCustomerState, formDa
   if (!canCreateCustomers(role, permissions)) {
     return { error: "Ehhez a művelethez ügyfél létrehozási jogosultság szükséges." };
   }
+  if (superadminOnly && role !== "superadmin") {
+    return { error: "Rejtett ügyfelet csak szuperadmin hozhat létre." };
+  }
 
   const supabase = await createClient();
   const slug = await createUniqueSlug(supabase, companyName);
@@ -73,6 +77,7 @@ export async function createCustomer(_previousState: CreateCustomerState, formDa
       company_name: companyName,
       slug,
       status,
+      superadmin_only: role === "superadmin" ? superadminOnly : false,
     })
     .select("id")
     .single();
@@ -95,7 +100,7 @@ export async function createCustomer(_previousState: CreateCustomerState, formDa
     organizationId: customer.id,
     title: "Ügyfél létrehozva",
     description: companyName,
-    metadata: { customerName, companyName, status, slug },
+    metadata: { customerName, companyName, status, slug, superadminOnly },
   });
 
   redirect(`/admin/customers/${customer.id}/edit`);

@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   const requestUrl = getAuthRequestUrl(request);
   const tokenHash = requestUrl.searchParams.get("token_hash");
   const type = requestUrl.searchParams.get("type");
-  const nextUrl = getSafeAuthRedirect(requestUrl, requestUrl.searchParams.get("redirect_to") ?? requestUrl.searchParams.get("next"));
+  const nextUrl = getSafeAuthRedirect(requestUrl, requestUrl.searchParams.get("next") ?? requestUrl.searchParams.get("redirect_to"));
 
   if (!tokenHash || !type || !allowedOtpTypes.has(type)) {
     return redirectToLogin(requestUrl.origin, nextUrl.pathname, "A belépési link hiányos vagy hibás.");

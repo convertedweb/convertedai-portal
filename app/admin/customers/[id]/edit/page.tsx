@@ -56,6 +56,7 @@ export default async function AdminCustomerEditPage({ params }: { params: Promis
         canEditCustomer={canEditCustomers(adminRole, adminPermissions)}
         canInviteCustomerUsers={canInviteCustomerUsers(adminRole, adminPermissions)}
         canManageProjects={canManageProjects}
+        isSuperadmin={adminRole === "superadmin"}
         customer={customer}
       />
     </section>

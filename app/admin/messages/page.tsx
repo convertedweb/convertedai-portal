@@ -4,6 +4,7 @@ import { getAdminSupportTickets, supportPriorityLabels, supportStatusLabels, sup
 import { DeleteSupportTicketButton } from "./delete-support-ticket-button";
 import { AdminSupportReplyForm } from "./support-reply-form";
 import { SupportStatusForm } from "./support-status-form";
+import { TicketToTaskButton } from "@/app/admin/tasks/ticket-to-task-button";
 
 export default async function AdminMessagesPage() {
   const { canDelete, canView, tickets, userEmail } = await getAdminSupportTickets();
@@ -65,6 +66,7 @@ export default async function AdminMessagesPage() {
                   ))}
                 </div>
                 <AdminSupportReplyForm ticketId={ticket.id} />
+                <TicketToTaskButton ticketId={ticket.id} />
                 {canDelete && <DeleteSupportTicketButton subject={ticket.subject} ticketId={ticket.id} />}
               </div>
             </details>

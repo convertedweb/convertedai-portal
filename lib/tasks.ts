@@ -5,6 +5,7 @@ export type TaskItem = {
   title: string;
   detail: string;
   href: string;
+  projectId?: string | null;
   tone: "warning" | "danger" | "info";
 };
 
@@ -39,7 +40,7 @@ export function getPortalTasks(projects: Project[]): TaskItem[] {
       });
     }
 
-    return tasks;
+    return tasks.map((task) => ({ ...task, projectId: project.id }));
   });
 }
 
@@ -128,6 +129,6 @@ export function getAdminTasks(projects: AdminProjectListItem[]): TaskItem[] {
       });
     }
 
-    return tasks;
+    return tasks.map((task) => ({ ...task, projectId: project.id }));
   });
 }

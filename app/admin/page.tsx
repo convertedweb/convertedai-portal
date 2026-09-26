@@ -1,4 +1,4 @@
-import { Building2, CirclePause, FolderKanban, Pencil, Users } from "lucide-react";
+import { Building2, CirclePause, FolderKanban, Lock, LockOpen, Pencil, Users } from "lucide-react";
 import Link from "next/link";
 import { customerStatusLabels, getAdminCustomers } from "@/lib/admin-data";
 import { canCreateCustomers, getAdminRoleLabel } from "@/lib/admin-permissions";
@@ -60,6 +60,7 @@ export default async function AdminCustomersPage() {
           <span>Ügyfél</span>
           <span>Cég</span>
           <span>Státusz</span>
+          <span>Láthatóság</span>
           <span>Tagok</span>
           <span>Projektek</span>
           <span>Létrehozva</span>
@@ -73,6 +74,7 @@ export default async function AdminCustomersPage() {
             </div>
             <div className="detail-value">{customer.companyName}</div>
             <div className={`status ${customer.status === "active" ? "live" : customer.status === "paused" ? "paused" : "building"}`}><span className="status-dot" />{customerStatusLabels[customer.status]}</div>
+            <div className={`customer-visibility ${customer.superadminOnly ? "private" : "shared"}`}>{customer.superadminOnly ? <Lock size={14} /> : <LockOpen size={14} />}<span>{customer.superadminOnly ? "Csak én" : "Adminok"}</span></div>
             <div className="detail-value"><Users size={14} />{customer.members}</div>
             <div className="detail-value"><FolderKanban size={14} />{customer.liveProjects} / {customer.projects} aktív</div>
             <div className="detail-value">{customer.createdAt}</div>

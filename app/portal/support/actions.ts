@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logCustomerActivity } from "@/lib/activity-log";
 import type { SupportTicketPriority, SupportTicketTopic } from "@/lib/support";
+import { supportTopicLabels } from "@/lib/support-labels";
 import { notifySupportTicket } from "@/lib/support-notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -27,6 +28,106 @@ function parseTopic(value: FormDataEntryValue | null): SupportTicketTopic | null
 
 function parsePriority(value: FormDataEntryValue | null): SupportTicketPriority {
   return value === "low" || value === "high" || value === "urgent" ? value : "normal";
+}
+
+type AdminSupabaseClient = NonNullable<ReturnType<typeof createAdminClient>>;
+
+async function resolveSupportTaskProject(
+  adminSupabase: AdminSupabaseClient,
+  organizationId: string,
+  requestedProjectId: string | null,
+) {
+  if (requestedProjectId) return requestedProjectId;
+
+  const { data: existingProject } = await adminSupabase
+    .from("projects")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("project_type", "internal")
+    .eq("name", "Ügyféltámogatás")
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingProject) return existingProject.id as string;
+
+  const { data: supportProject, error } = await adminSupabase
+    .from("projects")
+    .insert({
+      category: "automation",
+      name: "Ügyféltámogatás",
+      organization_id: organizationId,
+      project_type: "internal",
+      status: "building",
+      visibility: "internal",
+    })
+    .select("id")
+    .single();
+
+  if (error || !supportProject) {
+    console.error("Support task project create failed", error);
+    return null;
+  }
+
+  return supportProject.id as string;
+}
+
+async function createProjectManagerTaskFromSupportTicket({
+  adminSupabase,
+  createdBy,
+  message,
+  organizationId,
+  priority,
+  projectId,
+  subject,
+  ticketId,
+  topic,
+}: {
+  adminSupabase: AdminSupabaseClient;
+  createdBy: string;
+  message: string;
+  organizationId: string;
+  priority: SupportTicketPriority;
+  projectId: string | null;
+  subject: string;
+  ticketId: string;
+  topic: SupportTicketTopic;
+}) {
+  const routeToAdmin = topic === "general" || topic === "billing";
+  const [{ data: adminRoles }, { data: legacySuperadmins }] = await Promise.all([
+    adminSupabase.from("admin_roles").select("user_id, role, created_at").order("created_at", { ascending: true }),
+    adminSupabase.from("super_admins").select("user_id, created_at").order("created_at", { ascending: true }),
+  ]);
+
+  const regularAdminId = adminRoles?.find((entry) => entry.role === "admin")?.user_id as string | undefined;
+  const superadminId = (legacySuperadmins?.[0]?.user_id
+    ?? adminRoles?.find((entry) => entry.role === "superadmin")?.user_id) as string | undefined;
+  const assigneeUserId = routeToAdmin ? regularAdminId ?? superadminId : superadminId ?? regularAdminId;
+  const taskProjectId = await resolveSupportTaskProject(adminSupabase, organizationId, projectId);
+
+  if (!taskProjectId || !assigneeUserId) {
+    console.error("Support task routing failed", { hasAssignee: Boolean(assigneeUserId), hasProject: Boolean(taskProjectId), ticketId });
+    return false;
+  }
+
+  const { error } = await adminSupabase.from("tasks").insert({
+    assignee_user_id: assigneeUserId,
+    created_by: createdBy,
+    description: `Téma: ${supportTopicLabels[topic]}\n\n${message}`,
+    organization_id: organizationId,
+    priority,
+    project_id: taskProjectId,
+    source_ticket_id: ticketId,
+    title: subject,
+    visibility: routeToAdmin ? "internal" : "superadmin_only",
+  });
+
+  if (error) {
+    console.error("Automatic support task create failed", error);
+    return false;
+  }
+
+  return true;
 }
 
 export async function createSupportTicket(_previousState: CreateSupportTicketState, formData: FormData): Promise<CreateSupportTicketState> {
@@ -97,6 +198,20 @@ export async function createSupportTicket(_previousState: CreateSupportTicketSta
     return { error: "A ticket létrejött, de az üzenetet nem sikerült menteni." };
   }
 
+  const taskCreated = adminSupabase
+    ? await createProjectManagerTaskFromSupportTicket({
+        adminSupabase,
+        createdBy: user.id,
+        message,
+        organizationId,
+        priority,
+        projectId,
+        subject,
+        ticketId: ticket.id,
+        topic,
+      })
+    : false;
+
   await logCustomerActivity({
     eventType: "support_ticket_created",
     organizationId,
@@ -124,8 +239,9 @@ export async function createSupportTicket(_previousState: CreateSupportTicketSta
 
   revalidatePath("/portal/support");
   revalidatePath("/admin/messages");
+  revalidatePath("/admin/tasks");
 
-  return { success: "Üzenet elküldve." };
+  return { success: taskCreated ? "Üzenet elküldve." : "Üzenet elküldve, de a belső feladatot nem sikerült automatikusan létrehozni." };
 }
 
 export async function replySupportTicket(_previousState: ReplySupportTicketState, formData: FormData): Promise<ReplySupportTicketState> {

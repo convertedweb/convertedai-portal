@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { canManageCustomers, canManageProjects, getCurrentAdminAccess, type AdminPermissionSettings, type AdminRole } from "@/lib/admin-permissions";
 import { getProject } from "@/lib/data";
 import type { ElevenLabsAgentStatus, GoogleAccessStatus, PhoneRequestType, ProjectCategory, ProjectStatus, TelnyxStatus } from "@/lib/project-types";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type OrganizationStatus = "onboarding" | "active" | "paused" | "churned";
 
@@ -11,6 +12,7 @@ export type AdminCustomer = {
   companyName: string;
   slug: string;
   status: OrganizationStatus;
+  superadminOnly: boolean;
   createdAt: string;
   members: number;
   projects: number;
@@ -64,6 +66,7 @@ type OrganizationRow = {
   company_name: string | null;
   slug: string;
   status: OrganizationStatus;
+  superadmin_only: boolean;
   created_at: string | null;
 };
 
@@ -122,6 +125,7 @@ export const mockAdminCustomers: AdminCustomer[] = [
     companyName: "Converted Web Kft.",
     slug: "norpheus-demo",
     status: "active",
+    superadminOnly: false,
     createdAt: "2026. augusztus 13.",
     members: 1,
     projects: 2,
@@ -206,17 +210,22 @@ export async function getAdminCustomers(): Promise<{ adminPermissions: AdminPerm
 
   const { createClient } = await import("@/lib/supabase/server");
   const supabase = await createClient();
+  const dataClient = createAdminClient() ?? supabase;
   const [{ data: organizations }, { data: projects }, { data: members }, { data: documents }] = await Promise.all([
-    supabase.from("organizations").select("id, name, company_name, slug, status, created_at").is("deleted_at", null).order("created_at", { ascending: false }),
-    supabase.from("projects").select("id, organization_id, name, agent_display_name, category, phone_number, phone_request_type, phone_documents_received, google_access_status, google_access_required, elevenlabs_agent_id, elevenlabs_agent_status, elevenlabs_agent_error, elevenlabs_agent_created_at, prompt_assets_received, knowledge_assets_received, telnyx_status, status, greeting, call_instructions, updated_at").is("deleted_at", null).order("created_at", { ascending: false }),
-    supabase.from("org_members").select("id, organization_id, user_id, role, created_at"),
-    supabase.from("documents").select("project_id, processing_status").is("deleted_at", null),
+    dataClient.from("organizations").select("id, name, company_name, slug, status, superadmin_only, created_at").is("deleted_at", null).order("created_at", { ascending: false }),
+    dataClient.from("projects").select("id, organization_id, name, agent_display_name, category, phone_number, phone_request_type, phone_documents_received, google_access_status, google_access_required, elevenlabs_agent_id, elevenlabs_agent_status, elevenlabs_agent_error, elevenlabs_agent_created_at, prompt_assets_received, knowledge_assets_received, telnyx_status, status, greeting, call_instructions, updated_at").is("deleted_at", null).order("created_at", { ascending: false }),
+    dataClient.from("org_members").select("id, organization_id, user_id, role, created_at"),
+    dataClient.from("documents").select("project_id, processing_status").is("deleted_at", null),
   ]);
 
-  const projectRows = (projects ?? []) as ProjectRow[];
-  const memberRows = (members ?? []) as MemberRow[];
+  const organizationRows = role === "superadmin"
+    ? (organizations ?? []) as OrganizationRow[]
+    : ((organizations ?? []) as OrganizationRow[]).filter((organization) => !organization.superadmin_only);
+  const visibleOrganizationIds = new Set(organizationRows.map((organization) => organization.id));
+  const projectRows = ((projects ?? []) as ProjectRow[]).filter((project) => visibleOrganizationIds.has(project.organization_id));
+  const memberRows = ((members ?? []) as MemberRow[]).filter((member) => visibleOrganizationIds.has(member.organization_id));
   const documentRows = (documents ?? []) as DocumentRow[];
-  const organizationIds = ((organizations ?? []) as OrganizationRow[]).map((organization) => organization.id);
+  const organizationIds = organizationRows.map((organization) => organization.id);
   const { data: memberProfiles } = organizationIds.length
     ? await supabase.rpc("admin_customer_members", { p_organization_ids: organizationIds })
     : { data: [] };
@@ -238,7 +247,7 @@ export async function getAdminCustomers(): Promise<{ adminPermissions: AdminPerm
     adminRole: role,
     userEmail: user.email ?? null,
     userName: getAdminUserName(user),
-    customers: ((organizations ?? []) as OrganizationRow[]).map((organization) => {
+    customers: organizationRows.map((organization) => {
       const organizationProjects = projectRows.filter((project) => project.organization_id === organization.id);
       const organizationMembers = memberRows.filter((member) => member.organization_id === organization.id);
       const organizationMemberProfiles = memberProfileRows.filter((member) => member.organization_id === organization.id);
@@ -249,6 +258,7 @@ export async function getAdminCustomers(): Promise<{ adminPermissions: AdminPerm
         companyName: organization.company_name ?? organization.name,
         slug: organization.slug,
         status: organization.status,
+        superadminOnly: organization.superadmin_only ?? false,
         createdAt: formatDate(organization.created_at),
         members: memberCount,
         projects: organizationProjects.length,

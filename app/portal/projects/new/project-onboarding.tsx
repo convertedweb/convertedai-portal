@@ -6,14 +6,15 @@ import type { ProjectCategory } from "@/lib/project-types";
 import { createProject, type CreateProjectState } from "./actions";
 
 const initialState: CreateProjectState = {};
+type PortalProjectCategory = Exclude<ProjectCategory, "ui_ux_design" | "website">;
 
-const categories: Array<{ id: ProjectCategory; title: string; description: string; icon: typeof Bot }> = [
+const categories: Array<{ id: PortalProjectCategory; title: string; description: string; icon: typeof Bot }> = [
   { id: "chatbot", title: "Chatbot", description: "Webes vagy ügyfélszolgálati szöveges asszisztens.", icon: MessageSquareText },
   { id: "voice_agent", title: "AI Voice Agent", description: "Telefonos asszisztens hívások kezelésére.", icon: Bot },
   { id: "automation", title: "AI automatizáció", description: "Folyamatok, értesítések és háttérfeladatok automatizálása.", icon: Workflow },
 ];
 
-const categoryCopy: Record<ProjectCategory, {
+const categoryCopy: Record<PortalProjectCategory, {
   basicStepTitle: string;
   basicStepDescription: string;
   connectionStepTitle: string;
@@ -101,10 +102,10 @@ const categoryCopy: Record<ProjectCategory, {
   },
 };
 
-export function ProjectOnboarding({ companyName, initialCategory = null }: { companyName: string; initialCategory?: ProjectCategory | null }) {
+export function ProjectOnboarding({ companyName, initialCategory = null }: { companyName: string; initialCategory?: PortalProjectCategory | null }) {
   const isCategoryLocked = Boolean(initialCategory);
   const [currentStep, setCurrentStep] = useState(isCategoryLocked ? 1 : 0);
-  const [category, setCategory] = useState<ProjectCategory | null>(initialCategory);
+  const [category, setCategory] = useState<PortalProjectCategory | null>(initialCategory);
   const [projectName, setProjectName] = useState("");
   const [agentName, setAgentName] = useState("");
   const [agentLanguage, setAgentLanguage] = useState("hu");
@@ -390,7 +391,7 @@ export function ProjectOnboarding({ companyName, initialCategory = null }: { com
   );
 }
 
-function formatConnectionChoice(category: ProjectCategory, preference: string, primaryChoice: string, secondaryChoice: string) {
+function formatConnectionChoice(category: PortalProjectCategory, preference: string, primaryChoice: string, secondaryChoice: string) {
   if (category !== "voice_agent") return preference === "later" ? primaryChoice : secondaryChoice;
   if (preference === "21") return "06 21-es szám";
   if (preference === "local_private") return "Saját körzetes szám - magánszemély";

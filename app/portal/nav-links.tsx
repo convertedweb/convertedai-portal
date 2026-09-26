@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Bot, ChevronRight, LayoutDashboard, LifeBuoy, Phone, Workflow } from "lucide-react";
+import { Bot, LayoutDashboard, LifeBuoy, Phone } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -13,8 +13,6 @@ export default function NavLinks() {
       <Link className={`nav-link ${pathname.startsWith("/portal/projects") || pathname.startsWith("/portal/agents") ? "active" : ""}`} href="/portal/projects"><Bot size={17} /><span>Voice agentek</span></Link>
       <Link className={`nav-link ${pathname.startsWith("/portal/phone-numbers") ? "active" : ""}`} href="/portal/phone-numbers"><Phone size={17} /><span>Telefonszámok</span></Link>
       <Link className={`nav-link ${pathname.startsWith("/portal/support") ? "active" : ""}`} href="/portal/support"><LifeBuoy size={17} /><span>Támogatás</span></Link>
-      <Link className="nav-link muted" href="/portal/projects"><BookOpen size={17} /><span>Tudásbázis</span><ChevronRight size={15} /></Link>
-      <Link className="nav-link muted" href="/portal/projects"><Workflow size={17} /><span>Integrációk</span><ChevronRight size={15} /></Link>
     </nav>
   );
 }

@@ -45,7 +45,7 @@ function parseMemberRole(value: FormDataEntryValue | null) {
 }
 
 function parseProjectCategory(value: FormDataEntryValue | null): ProjectCategory {
-  return value === "chatbot" || value === "automation" || value === "voice_agent" ? value : "voice_agent";
+  return value === "chatbot" || value === "automation" || value === "voice_agent" || value === "ui_ux_design" || value === "website" ? value : "voice_agent";
 }
 
 function parseProjectStatus(value: FormDataEntryValue | null): ProjectStatus {
@@ -126,6 +126,7 @@ export async function updateCustomer(_previousState: UpdateCustomerState, formDa
   const customerName = requiredText(formData.get("customerName"));
   const companyName = requiredText(formData.get("companyName"));
   const status = parseStatus(formData.get("status"));
+  const superadminOnly = formData.get("superadminOnly") === "on";
 
   if (!customerId || !customerName || !companyName) {
     return { error: "Az ügyfél neve és a cég mező kötelező." };
@@ -133,6 +134,7 @@ export async function updateCustomer(_previousState: UpdateCustomerState, formDa
 
   const adminCheck = await assertCustomerEditAdmin();
   if ("error" in adminCheck) return { error: adminCheck.error };
+  if (superadminOnly && adminCheck.role !== "superadmin") return { error: "Ezt a láthatóságot csak szuperadmin állíthatja be." };
 
   const supabase = await createClient();
   const { error: updateError } = await supabase
@@ -142,6 +144,7 @@ export async function updateCustomer(_previousState: UpdateCustomerState, formDa
       company_name: companyName,
       slug: slugify(companyName) || customerId,
       status,
+      ...(adminCheck.role === "superadmin" ? { superadmin_only: superadminOnly } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", customerId);
@@ -164,7 +167,7 @@ export async function updateCustomer(_previousState: UpdateCustomerState, formDa
     organizationId: customerId,
     title: "Ügyfél adatok módosítva",
     description: companyName,
-    metadata: { customerName, companyName, status },
+    metadata: { customerName, companyName, status, superadminOnly },
   });
 
   redirect(`/admin/customers/${customerId}/edit`);
@@ -271,6 +274,7 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
   const companyName = requiredText(formData.get("companyName"));
   const projectName = requiredText(formData.get("projectName"));
   const category = parseProjectCategory(formData.get("category"));
+  const isDeliveryProject = category === "ui_ux_design" || category === "website";
   const status = parseProjectStatus(formData.get("status"));
   const agentName = requiredText(formData.get("agentName"));
   const phoneRequestType = category === "voice_agent" ? parsePhoneRequestType(formData.get("phoneRequestType")) : null;
@@ -278,15 +282,15 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
   const telnyxStatus = category === "voice_agent" ? parseTelnyxStatus(formData.get("telnyxStatus")) : "pending";
   const googleAccountEmail = requiredText(formData.get("googleAccountEmail")) || null;
   const googlePasswordShareUrl = requiredText(formData.get("googlePasswordShareUrl")) || null;
-  const googleAccessStatus = parseGoogleAccessStatus(formData.get("googleAccessStatus"));
-  const googleAccessRequired = formData.get("googleAccessRequired") === "on";
+  const googleAccessStatus = isDeliveryProject ? "not_provided" : parseGoogleAccessStatus(formData.get("googleAccessStatus"));
+  const googleAccessRequired = isDeliveryProject ? false : formData.get("googleAccessRequired") === "on";
   const plannedLaunchDate = optionalDate(formData.get("plannedLaunchDate"));
 
   if (!customerId || !companyName || !projectName) {
     return { error: "Az ügyfél, cég és projekt neve kötelező." };
   }
 
-  if (category !== "automation" && !agentName) {
+  if ((category === "voice_agent" || category === "chatbot") && !agentName) {
     return { error: "Voice agent vagy chatbot projektnél az agent neve kötelező." };
   }
 
@@ -314,15 +318,16 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
     .insert({
       organization_id: customerId,
       name: formatProjectName(companyName, projectName),
-      agent_display_name: category === "automation" ? null : agentName,
+      agent_display_name: category === "voice_agent" || category === "chatbot" ? agentName : null,
       category,
+      project_type: category === "website" ? "website" : category === "ui_ux_design" ? "other" : category === "automation" ? "automation" : "voice_agent",
       status,
       phone_request_type: phoneRequestType,
       phone_number: phoneNumber,
       telnyx_status: telnyxStatus,
-      google_account_email: googleAccountEmail,
-      google_password_share_url: googlePasswordShareUrl,
-      google_access_confirmed: Boolean(googleAccountEmail && googlePasswordShareUrl),
+      google_account_email: isDeliveryProject ? null : googleAccountEmail,
+      google_password_share_url: isDeliveryProject ? null : googlePasswordShareUrl,
+      google_access_confirmed: isDeliveryProject ? false : Boolean(googleAccountEmail && googlePasswordShareUrl),
       google_access_status: googleAccessStatus,
       google_access_required: googleAccessRequired,
       planned_launch_date: plannedLaunchDate,

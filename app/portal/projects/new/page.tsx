@@ -4,7 +4,9 @@ import { getPortalUserSummary } from "@/lib/data";
 import type { ProjectCategory } from "@/lib/project-types";
 import { ProjectOnboarding } from "./project-onboarding";
 
-function parseCategory(value: string | string[] | undefined): ProjectCategory | null {
+type PortalProjectCategory = Exclude<ProjectCategory, "ui_ux_design" | "website">;
+
+function parseCategory(value: string | string[] | undefined): PortalProjectCategory | null {
   const category = Array.isArray(value) ? value[0] : value;
   return category === "voice_agent" || category === "chatbot" || category === "automation" ? category : null;
 }

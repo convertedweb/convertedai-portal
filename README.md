@@ -46,7 +46,7 @@ Ezután a superadmin felület a `http://localhost:3000/admin` címen érhető el
 
 ### Magic link email sablon
 
-PKCE auth flow esetén ne a `{{ .ConfirmationURL }}` linket használd, mert másik böngészőben vagy frissült session után `PKCE code verifier not found in storage` hibát okozhat. A Magic Link sablonban `{{ .TokenHash }}` alapú linket használj:
+PKCE auth flow esetén ne a `{{ .ConfirmationURL }}` linket használd, mert másik böngészőben vagy frissült session után `PKCE code verifier not found in storage` hibát okozhat. A Magic Link sablonban `{{ .TokenHash }}` alapú linket használj. Az alkalmazás az `emailRedirectTo` értékeként query paraméter nélkül adja át az `/auth/confirm` végpontot, ezért a token előtt `?` szükséges:
 
 ```html
 <h2>Belépés az ügyfélportálba</h2>
@@ -54,7 +54,7 @@ PKCE auth flow esetén ne a `{{ .ConfirmationURL }}` linket használd, mert más
 <p>Kattints az alábbi gombra a belépéshez:</p>
 
 <p>
-  <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&redirect_to={{ .RedirectTo }}"
+  <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email"
      style="display:inline-block;padding:12px 18px;background:#6875e8;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;">
     Belépés a portálba
   </a>
@@ -62,6 +62,13 @@ PKCE auth flow esetén ne a `{{ .ConfirmationURL }}` linket használd, mert más
 
 <p>Ez a belépési link rövid ideig érvényes, és csak egyszer használható.</p>
 <p>Ha nem te kérted ezt a belépési linket, nyugodtan hagyd figyelmen kívül ezt az emailt.</p>
+```
+
+A Supabase Authentication > URL Configuration alatt engedélyezd mindkét környezet callback URL-jét:
+
+```text
+http://localhost:3000/auth/confirm
+https://portal.convertedweb.com/auth/confirm
 ```
 
 Az anon kulcs csak kliensoldali Supabase kliens létrehozására szolgálhat. Tenant-szűrést és minden írást szerveroldali route handler vagy server action kezeljen.

@@ -180,7 +180,7 @@ export async function createProject(_previousState: CreateProjectState, formData
     .filter((file): file is File => file instanceof File && file.size > 0);
 
   if (!projectName || (requiresAgentName && !agentName)) {
-    return { error: requiresAgentName ? "Adja meg a projekt nevét és a megjelenített nevet." : "Adja meg a projekt nevét." };
+    return { error: requiresAgentName ? "Add meg a projekt nevét és a megjelenített nevet." : "Add meg a projekt nevét." };
   }
 
   const knowledgeFileError = knowledgeFiles.map(validateKnowledgeFile).find(Boolean);

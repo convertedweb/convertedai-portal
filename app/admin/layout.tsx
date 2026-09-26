@@ -23,7 +23,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
       <aside className="icon-rail" aria-label="Admin gyors műveletek">
         <div className="rail-logo"><Sparkles size={18} /></div>
         <div className="rail-bottom">
-          <Link className="rail-button rail-notifications" aria-label={`Értesítések: ${notificationCount} db`} title={`${notificationCount} értesítés`} href="/admin/tasks">
+          <Link className="rail-button rail-notifications" aria-label={`Értesítések: ${notificationCount} db`} title={`${notificationCount} értesítés`} href="/admin/notifications">
             <Bell size={18} />
             {notificationCount > 0 && <span className="rail-badge">{notificationCount > 9 ? "9+" : notificationCount}</span>}
           </Link>
@@ -32,7 +32,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
         </div>
       </aside>
       <aside className="sidebar">
-        <div className="brand"><div className="brand-name">norpheus AI Admin</div></div>
+        <div className="brand"><div className="brand-name">Ügyfél Portál Admin</div></div>
         <AdminNavLinks adminPermissions={adminPermissions} canManagePermissions={adminRole === "superadmin"} />
         <div className="sidebar-bottom">
           <div className="user-row"><div className="avatar">{initials}</div><div className="user-copy"><div className="user-name">{userName}</div><div className="user-email">{userEmail ?? "admin felület"}</div></div></div>

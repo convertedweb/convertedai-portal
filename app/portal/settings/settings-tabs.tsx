@@ -41,7 +41,7 @@ export function SettingsTabs({ userSummary }: { userSummary: PortalUserSummary }
       <div className="settings-content">
         {activeTab === "account" && (
           <div className="settings-panel">
-            <div className="settings-panel-heading"><div><h2>Fiók adatai</h2><p>Az itt megadott adatok alapján vesszük fel Önnel a kapcsolatot.</p></div><div className="settings-avatar">{userSummary.initials}</div></div>
+            <div className="settings-panel-heading"><div><h2>Fiók adatai</h2><p>Az itt megadott adatok alapján vesszük fel veled a kapcsolatot.</p></div><div className="settings-avatar">{userSummary.initials}</div></div>
             <div className="settings-form-grid"><label className="field"><span>Teljes név</span><input defaultValue={userSummary.name} /></label><label className="field"><span>E-mail-cím</span><div className="input-with-icon"><Mail size={15} /><input defaultValue={userSummary.email} type="email" /></div></label><label className="field"><span>Telefonszám</span><input defaultValue="" placeholder="Nincs megadva" /></label><label className="field"><span>Szerepkör</span><input defaultValue="Tulajdonos" disabled /></label></div>
             <div className="settings-actions"><span className="save-note"><Check size={15} /> Minden módosítás menthető</span><button className="button" disabled title="A mentés hamarosan elérhető">Módosítások mentése</button></div>
           </div>
@@ -49,7 +49,7 @@ export function SettingsTabs({ userSummary }: { userSummary: PortalUserSummary }
 
         {activeTab === "notifications" && (
           <div className="settings-panel">
-            <div className="settings-panel-heading"><div><h2>Értesítések</h2><p>Válassza ki, milyen fontos változásokról szeretne e-mailt kapni.</p></div></div>
+            <div className="settings-panel-heading"><div><h2>Értesítések</h2><p>Válaszd ki, milyen fontos változásokról szeretnél e-mailt kapni.</p></div></div>
             <div className="setting-option"><div><strong>Projekt státuszának változása</strong><p>Értesítés, amikor a projekt beállítási állapota frissül.</p></div><label className="toggle"><input type="checkbox" defaultChecked /><span /></label></div>
             <div className="setting-option"><div><strong>Dokumentum feldolgozása</strong><p>Értesítés a feltöltött dokumentumok feldolgozásának eredményéről.</p></div><label className="toggle"><input type="checkbox" defaultChecked /><span /></label></div>
             <div className="setting-option"><div><strong>Havi összefoglaló</strong><p>Havi rövid áttekintés a projekt aktivitásáról.</p></div><label className="toggle"><input type="checkbox" /><span /></label></div>
@@ -59,7 +59,7 @@ export function SettingsTabs({ userSummary }: { userSummary: PortalUserSummary }
         {activeTab === "access" && (
           <div className="settings-panel">
             <div className="settings-panel-heading"><div><h2>Hozzáférés</h2><p>A portálhoz tartozó bejelentkezési információk.</p></div></div>
-            <div className="access-row"><div><strong>Magic linkes belépés</strong><p>A belépési linket minden alkalommal az e-mail-címére küldjük.</p></div><span className="access-status"><Check size={14} /> Bekapcsolva</span></div>
+            <div className="access-row"><div><strong>Magic linkes belépés</strong><p>A belépési linket minden alkalommal az e-mail-címedre küldjük.</p></div><span className="access-status"><Check size={14} /> Bekapcsolva</span></div>
             <div className="access-row"><div><strong>Bejelentkezett munkamenetek</strong><p>Jelenlegi munkamenet: ez az eszköz</p></div><button className="text-button" disabled>Munkamenetek kezelése <ChevronRight size={15} /></button></div>
           </div>
         )}

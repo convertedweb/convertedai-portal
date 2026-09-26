@@ -1,5 +1,5 @@
 export type ProjectStatus = "draft" | "review_requested" | "building" | "live" | "paused" | "archived";
-export type ProjectCategory = "chatbot" | "voice_agent" | "automation";
+export type ProjectCategory = "chatbot" | "voice_agent" | "automation" | "ui_ux_design" | "website";
 export type TelnyxStatus = "pending" | "requested" | "connected" | "linked_to_voice_agent" | "failed";
 export type PhoneRequestType = "hu_21" | "local_company" | "local_private";
 export type GoogleAccessStatus = "not_provided" | "submitted" | "checking" | "working" | "failed";
@@ -65,6 +65,8 @@ export const categoryLabels: Record<ProjectCategory, string> = {
   chatbot: "Chatbot",
   voice_agent: "AI Voice Agent",
   automation: "AI automatizáció",
+  ui_ux_design: "UI/UX design",
+  website: "Weboldal",
 };
 
 export const telnyxStatusLabels: Record<TelnyxStatus, string> = {

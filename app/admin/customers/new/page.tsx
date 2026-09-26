@@ -51,7 +51,7 @@ export default async function NewCustomerPage() {
         <div className="customer-icon"><Building2 size={17} /></div>
       </div>
       <div className="settings-content">
-        <NewCustomerForm />
+        <NewCustomerForm isSuperadmin={adminRole === "superadmin"} />
       </div>
     </section>
   );

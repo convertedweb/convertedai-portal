@@ -11,7 +11,7 @@ export default async function ProjectsPage() {
         <div>
           <p className="eyebrow">Voice agentek</p>
           <h1>Voice agentek</h1>
-          <p className="intro-copy">Tekintse át a telefonos asszisztenseit, és nyissa meg a hozzájuk tartozó dokumentumokat, státuszokat és aktivitást.</p>
+          <p className="intro-copy">Tekintsd át a telefonos asszisztenseidet, és nyisd meg a hozzájuk tartozó dokumentumokat, státuszokat és aktivitást.</p>
         </div>
         <Link className="button" href="/portal/projects/new?category=voice_agent"><Plus size={15} /> Új voice agent</Link>
       </div>

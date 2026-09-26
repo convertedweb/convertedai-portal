@@ -31,7 +31,7 @@ export default async function PortalLayout({ children }: Readonly<{ children: Re
         </div>
       </aside>
       <aside className="sidebar">
-        <div className="brand"><div className="brand-name">norpheus AI</div></div>
+        <div className="brand"><div className="brand-name">Ügyfél Portál</div></div>
         <NavLinks />
         <div className="sidebar-bottom">
           <div className="user-row"><div className="avatar">{userSummary.initials}</div><div className="user-copy"><div className="user-name">{userSummary.name}</div><div className="user-email">{userSummary.email}</div></div></div>

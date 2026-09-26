@@ -24,7 +24,7 @@ function parseProjectStatus(value: FormDataEntryValue | null): ProjectStatus | n
 }
 
 function parseProjectCategory(value: FormDataEntryValue | null): ProjectCategory | null {
-  return value === "voice_agent" || value === "chatbot" || value === "automation" ? value : null;
+  return value === "voice_agent" || value === "chatbot" || value === "automation" || value === "ui_ux_design" || value === "website" ? value : null;
 }
 
 function parseTelnyxStatus(value: FormDataEntryValue | null): TelnyxStatus | null {

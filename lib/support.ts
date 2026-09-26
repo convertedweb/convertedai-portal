@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAdminCustomers } from "@/lib/admin-data";
+import { getCurrentAdminAccess } from "@/lib/admin-permissions";
 export { supportPriorityLabels, supportStatusLabels, supportTopicLabels } from "@/lib/support-labels";
 import type { SupportTicketPriority, SupportTicketStatus, SupportTicketTopic } from "@/lib/support-labels";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -34,6 +35,7 @@ type OrganizationRow = {
   id: string;
   name: string;
   company_name: string | null;
+  superadmin_only: boolean;
 };
 
 type ProjectRow = {
@@ -66,6 +68,7 @@ export type PortalSupportTicket = {
 export type AdminSupportTicket = PortalSupportTicket & {
   customerName: string;
   priority: SupportTicketPriority;
+  projectId: string | null;
 };
 
 export type SupportTicketMessage = {
@@ -131,21 +134,27 @@ export async function getAdminSupportTickets(): Promise<{ canDelete: boolean; ca
   const [{ data: ticketRows }, { data: messageRows }, { data: organizationRows }, { data: projectRows }] = await Promise.all([
     adminSupabase.from("support_tickets").select("id, organization_id, project_id, created_by, subject, topic, status, priority, last_message_at, created_at, updated_at").is("deleted_at", null).order("last_message_at", { ascending: false }),
     adminSupabase.from("support_ticket_messages").select("id, ticket_id, organization_id, author_role, author_user_id, message, created_at").is("deleted_at", null).order("created_at", { ascending: true }),
-    adminSupabase.from("organizations").select("id, name, company_name").is("deleted_at", null),
+    adminSupabase.from("organizations").select("id, name, company_name, superadmin_only").is("deleted_at", null),
     adminSupabase.from("projects").select("id, name").is("deleted_at", null),
   ]);
 
+  const visibleOrganizationRows = adminRole === "superadmin"
+    ? (organizationRows ?? []) as OrganizationRow[]
+    : ((organizationRows ?? []) as OrganizationRow[]).filter((organization) => !organization.superadmin_only);
+  const visibleOrganizationIds = new Set(visibleOrganizationRows.map((organization) => organization.id));
+  const visibleTickets = ((ticketRows ?? []) as TicketRow[]).filter((ticket) => visibleOrganizationIds.has(ticket.organization_id));
+  const visibleTicketIds = new Set(visibleTickets.map((ticket) => ticket.id));
   const messagesByTicket = new Map<string, MessageRow[]>();
-  ((messageRows ?? []) as MessageRow[]).forEach((message) => {
+  ((messageRows ?? []) as MessageRow[]).filter((message) => visibleTicketIds.has(message.ticket_id)).forEach((message) => {
     messagesByTicket.set(message.ticket_id, [...(messagesByTicket.get(message.ticket_id) ?? []), message]);
   });
-  const organizationsById = new Map(((organizationRows ?? []) as OrganizationRow[]).map((organization) => [organization.id, organization.company_name ?? organization.name]));
+  const organizationsById = new Map(visibleOrganizationRows.map((organization) => [organization.id, organization.company_name ?? organization.name]));
   const projectsById = new Map(((projectRows ?? []) as ProjectRow[]).map((project) => [project.id, project.name]));
 
   return {
     canDelete: adminRole === "superadmin",
     canView: true,
-    tickets: ((ticketRows ?? []) as TicketRow[]).map((ticket) => ({
+    tickets: visibleTickets.map((ticket) => ({
       customerName: organizationsById.get(ticket.organization_id) ?? "Ismeretlen ügyfél",
       id: ticket.id,
       messagePreview: getPreview(messagesByTicket.get(ticket.id)?.[0]?.message ?? null),
@@ -156,6 +165,7 @@ export async function getAdminSupportTickets(): Promise<{ canDelete: boolean; ca
         message: message.message,
       })),
       priority: ticket.priority,
+      projectId: ticket.project_id,
       projectName: ticket.project_id ? projectsById.get(ticket.project_id) ?? null : null,
       status: ticket.status,
       subject: ticket.subject,
@@ -191,14 +201,25 @@ export async function getPortalSupportAlertCount() {
 }
 
 export async function getAdminSupportAlertCount() {
+  const { role } = await getCurrentAdminAccess();
+  if (!role) return 0;
   const adminSupabase = createAdminClient();
   if (!adminSupabase) return 0;
 
-  const { count } = await adminSupabase
+  let visibleOrganizationIds: string[] | null = null;
+  if (role !== "superadmin") {
+    const { data: organizations } = await adminSupabase.from("organizations").select("id").eq("superadmin_only", false).is("deleted_at", null);
+    visibleOrganizationIds = (organizations ?? []).map((organization) => organization.id as string);
+    if (!visibleOrganizationIds.length) return 0;
+  }
+
+  let query = adminSupabase
     .from("support_tickets")
     .select("id", { count: "exact", head: true })
     .in("status", ["open", "in_progress"])
     .is("deleted_at", null);
+  if (visibleOrganizationIds) query = query.in("organization_id", visibleOrganizationIds);
+  const { count } = await query;
 
   return count ?? 0;
 }

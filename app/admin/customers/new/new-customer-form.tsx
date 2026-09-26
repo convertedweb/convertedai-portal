@@ -13,7 +13,7 @@ const customerStatusOptions = [
   ["churned", "Lezárt"],
 ] as const;
 
-export function NewCustomerForm() {
+export function NewCustomerForm({ isSuperadmin }: { isSuperadmin: boolean }) {
   const [state, formAction, pending] = useActionState(createCustomer, initialState);
 
   return (
@@ -27,6 +27,12 @@ export function NewCustomerForm() {
           <label className="field"><span>Cég</span><input name="companyName" required placeholder="Pl. Converted Web Kft." /></label>
           <label className="field"><span>Státusz</span><select name="status" defaultValue="onboarding">{customerStatusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>
+        {isSuperadmin && (
+          <label className="setting-option customer-visibility-toggle">
+            <div><strong>Csak én látom</strong><p>Az ügyfél és a hozzá tartozó belső adatok nem jelennek meg más adminoknak. Az ügyfél saját portál-hozzáférése változatlan marad.</p></div>
+            <span className="toggle"><input name="superadminOnly" type="checkbox" /><span /></span>
+          </label>
+        )}
         {state.error && <p className="form-error">{state.error}</p>}
         <div className="settings-actions">
           <Link className="text-button" href="/admin">Mégsem</Link>

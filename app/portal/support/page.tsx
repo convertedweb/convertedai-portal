@@ -12,7 +12,7 @@ export default async function PortalSupportPage() {
         <div>
           <p className="eyebrow">Támogatás</p>
           <h1>Üzenetek</h1>
-          <p className="intro-copy">Kérdés, módosítás vagy hiba esetén itt tudsz üzenetet küldeni a norpheus AI csapatának.</p>
+          <p className="intro-copy">Kérdés, módosítás vagy hiba esetén itt tudsz üzenetet küldeni.</p>
         </div>
       </div>
 

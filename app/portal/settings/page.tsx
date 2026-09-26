@@ -10,7 +10,7 @@ export default async function SettingsPage() {
         <div>
           <p className="eyebrow">Fiókkezelés</p>
           <h1>Beállítások</h1>
-          <p className="intro-copy">Kezelje a portálhoz tartozó kapcsolattartási és értesítési beállításait.</p>
+          <p className="intro-copy">Kezeld a portálhoz tartozó kapcsolattartási és értesítési beállításaidat.</p>
         </div>
       </div>
 

@@ -1,6 +1,8 @@
 node_modules/
 .next/
 .next-dev/
+tsconfig.tsbuildinfo
+supabase/.temp/
 .env*
 !.env.example
 out/
