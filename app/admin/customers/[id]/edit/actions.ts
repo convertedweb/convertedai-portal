@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logAdminActivity } from "@/lib/activity-log";
 import { canEditCustomers, canInviteCustomerUsers, canManageProjects, getCurrentAdminAccess } from "@/lib/admin-permissions";
-import type { OrganizationStatus } from "@/lib/admin-data";
+import type { InvoiceStatus, InvoiceType, OrganizationStatus } from "@/lib/admin-data";
 import type { GoogleAccessStatus, PhoneRequestType, ProjectCategory, ProjectStatus, TelnyxStatus } from "@/lib/project-types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -20,6 +20,11 @@ export type InviteCustomerMemberState = {
 
 export type CreateAdminProjectState = {
   error?: string;
+};
+
+export type CreateInvoiceState = {
+  error?: string;
+  success?: string;
 };
 
 function requiredText(value: FormDataEntryValue | null) {
@@ -67,6 +72,20 @@ function parseGoogleAccessStatus(value: FormDataEntryValue | null): GoogleAccess
 function optionalDate(value: FormDataEntryValue | null) {
   const date = requiredText(value);
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+}
+
+function parseInvoiceStatus(value: FormDataEntryValue | null): InvoiceStatus {
+  return value === "draft" || value === "paid" || value === "overdue" || value === "cancelled" ? value : "issued";
+}
+
+function parseInvoiceType(value: FormDataEntryValue | null): InvoiceType {
+  return value === "monthly_fee" ? "monthly_fee" : "setup_fee";
+}
+
+function parseAmount(value: FormDataEntryValue | null) {
+  const normalized = requiredText(value).replace(/\s/g, "").replace(",", ".");
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) / 100 : null;
 }
 
 function formatProjectName(companyName: string, projectName: string) {
@@ -365,4 +384,156 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
   revalidatePath("/portal/projects");
 
   redirect(`/admin/projects/${project.id}`);
+}
+
+export async function createInvoice(_previousState: CreateInvoiceState, formData: FormData) {
+  const customerId = requiredText(formData.get("customerId"));
+  const projectId = requiredText(formData.get("projectId"));
+  const invoiceNumber = requiredText(formData.get("invoiceNumber"));
+  const invoiceType = parseInvoiceType(formData.get("invoiceType"));
+  const issuedOn = optionalDate(formData.get("issuedOn"));
+  const paymentDate = optionalDate(formData.get("paymentDate"));
+  const status = parseInvoiceStatus(formData.get("status"));
+  const amount = parseAmount(formData.get("amount"));
+
+  if (!customerId || !projectId || !invoiceNumber || !issuedOn || !paymentDate || amount === null) {
+    return { error: "A számla minden mezőjét helyesen ki kell tölteni." };
+  }
+
+  if (paymentDate < issuedOn) {
+    return { error: "A fizetés dátuma nem lehet korábbi a kiállítás dátumánál." };
+  }
+
+  const adminCheck = await assertCustomerEditAdmin();
+  if ("error" in adminCheck) return { error: adminCheck.error };
+
+  const adminSupabase = createAdminClient();
+  if (!adminSupabase) {
+    return { error: "Hiányzik a Supabase titkos szerveroldali kulcs." };
+  }
+
+  const { data: project, error: projectError } = await adminSupabase
+    .from("projects")
+    .select("id, name")
+    .eq("id", projectId)
+    .eq("organization_id", customerId)
+    .is("deleted_at", null)
+    .single();
+
+  if (projectError || !project) {
+    return { error: "A kiválasztott projekt nem tartozik ehhez az ügyfélhez." };
+  }
+
+  const { error: invoiceError } = await adminSupabase.from("invoices").insert({
+    amount,
+    created_by: adminCheck.user.id,
+    currency: "HUF",
+    invoice_number: invoiceNumber,
+    invoice_type: invoiceType,
+    issued_on: issuedOn,
+    organization_id: customerId,
+    payment_date: paymentDate,
+    project_id: projectId,
+    status,
+  });
+
+  if (invoiceError) {
+    console.error("Invoice creation failed", invoiceError);
+    return {
+      error: invoiceError.code === "23505"
+        ? "Ezzel a sorszámmal már létezik számla ennél az ügyfélnél."
+        : "Nem sikerült létrehozni a számlát.",
+    };
+  }
+
+  await logAdminActivity({
+    actorUserId: adminCheck.user.id,
+    eventType: "admin_invoice_created",
+    organizationId: customerId,
+    projectId,
+    title: "Számla létrehozva",
+    description: invoiceNumber,
+    metadata: { amount, currency: "HUF", invoiceType, issuedOn, paymentDate, projectName: project.name, status },
+  });
+
+  revalidatePath(`/admin/customers/${customerId}/edit`);
+  revalidatePath("/admin/finance");
+  return { success: "A számla sikeresen létrejött." };
+}
+
+export async function updateInvoice(_previousState: CreateInvoiceState, formData: FormData) {
+  const invoiceId = requiredText(formData.get("invoiceId"));
+  const customerId = requiredText(formData.get("customerId"));
+  const projectId = requiredText(formData.get("projectId"));
+  const invoiceNumber = requiredText(formData.get("invoiceNumber"));
+  const invoiceType = parseInvoiceType(formData.get("invoiceType"));
+  const issuedOn = optionalDate(formData.get("issuedOn"));
+  const paymentDate = optionalDate(formData.get("paymentDate"));
+  const status = parseInvoiceStatus(formData.get("status"));
+  const amount = parseAmount(formData.get("amount"));
+
+  if (!invoiceId || !customerId || !projectId || !invoiceNumber || !issuedOn || !paymentDate || amount === null) {
+    return { error: "A számla minden mezőjét helyesen ki kell tölteni." };
+  }
+
+  if (paymentDate < issuedOn) {
+    return { error: "A fizetés dátuma nem lehet korábbi a kiállítás dátumánál." };
+  }
+
+  const adminCheck = await assertCustomerEditAdmin();
+  if ("error" in adminCheck) return { error: adminCheck.error };
+
+  const adminSupabase = createAdminClient();
+  if (!adminSupabase) return { error: "Hiányzik a Supabase titkos szerveroldali kulcs." };
+
+  const { data: project, error: projectError } = await adminSupabase
+    .from("projects")
+    .select("id, name")
+    .eq("id", projectId)
+    .eq("organization_id", customerId)
+    .is("deleted_at", null)
+    .single();
+
+  if (projectError || !project) {
+    return { error: "A kiválasztott projekt nem tartozik ehhez az ügyfélhez." };
+  }
+
+  const { data: invoice, error: invoiceError } = await adminSupabase
+    .from("invoices")
+    .update({
+      amount,
+      invoice_number: invoiceNumber,
+      invoice_type: invoiceType,
+      issued_on: issuedOn,
+      payment_date: paymentDate,
+      project_id: projectId,
+      status,
+    })
+    .eq("id", invoiceId)
+    .eq("organization_id", customerId)
+    .select("id")
+    .single();
+
+  if (invoiceError || !invoice) {
+    console.error("Invoice update failed", invoiceError);
+    return {
+      error: invoiceError?.code === "23505"
+        ? "Ezzel a sorszámmal már létezik számla ennél az ügyfélnél."
+        : "Nem sikerült módosítani a számlát.",
+    };
+  }
+
+  await logAdminActivity({
+    actorUserId: adminCheck.user.id,
+    eventType: "admin_invoice_updated",
+    organizationId: customerId,
+    projectId,
+    title: "Számla módosítva",
+    description: invoiceNumber,
+    metadata: { amount, currency: "HUF", invoiceType, issuedOn, paymentDate, projectName: project.name, status },
+  });
+
+  revalidatePath(`/admin/customers/${customerId}/edit`);
+  revalidatePath("/admin/finance");
+  return { success: "A számla módosításai elmentve." };
 }

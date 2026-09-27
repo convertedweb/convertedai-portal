@@ -6,14 +6,14 @@ import { type DragEvent, useEffect, useState } from "react";
 import type { ProjectManagementTask, TaskStatus } from "@/lib/project-management";
 import { moveTask } from "./actions";
 
-const statuses = ["backlog", "planned", "in_progress", "waiting_client", "review", "done"] as const;
-const statusLabels = { backlog: "Ötletek", planned: "Tervezve", in_progress: "Folyamatban", waiting_client: "Ügyfélre vár", review: "Ellenőrzés", done: "Kész" } as const;
+const taskStatuses = ["backlog", "planned", "todo", "in_progress", "waiting_client", "review", "done"] as const;
+const taskStatusLabels = { backlog: "Ötletek", todo: "Tennivaló", planned: "Tervezve", in_progress: "Folyamatban", waiting_client: "Ügyfélre vár", review: "Ellenőrzés", done: "Kész" } as const;
 const priorityLabels = { low: "Alacsony", normal: "Normál", high: "Magas", urgent: "Sürgős" } as const;
 
 export function KanbanBoard({ initialTasks }: { initialTasks: ProjectManagementTask[] }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [overStatus, setOverStatus] = useState<(typeof statuses)[number] | null>(null);
+  const [overStatus, setOverStatus] = useState<(typeof taskStatuses)[number] | null>(null);
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +26,7 @@ export function KanbanBoard({ initialTasks }: { initialTasks: ProjectManagementT
     setError(null);
   }
 
-  async function dropTask(event: DragEvent<HTMLElement>, status: (typeof statuses)[number]) {
+  async function dropTask(event: DragEvent<HTMLElement>, status: (typeof taskStatuses)[number]) {
     event.preventDefault();
     const taskId = event.dataTransfer.getData("text/plain") || draggedTaskId;
     if (!taskId) return;
@@ -51,7 +51,7 @@ export function KanbanBoard({ initialTasks }: { initialTasks: ProjectManagementT
       {error && <div className="kanban-error" role="alert">{error}</div>}
       <div className="task-board-wrap">
         <div className="task-board">
-          {statuses.map((status) => {
+          {taskStatuses.map((status) => {
             const columnTasks = tasks.filter((task) => task.status === status);
             return (
               <section
@@ -62,7 +62,7 @@ export function KanbanBoard({ initialTasks }: { initialTasks: ProjectManagementT
                 onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOverStatus(null); }}
                 onDrop={(event) => void dropTask(event, status)}
               >
-                <header><div><span className="task-column-dot" /><h2>{statusLabels[status]}</h2></div><strong>{columnTasks.length}</strong></header>
+                <header><div><span className="task-column-dot" /><h2>{taskStatusLabels[status]}</h2></div><strong>{columnTasks.length}</strong></header>
                 <div className="task-column-cards">
                   {columnTasks.map((task) => {
                     const saving = savingTaskId === task.id;

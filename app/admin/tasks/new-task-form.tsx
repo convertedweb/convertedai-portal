@@ -2,6 +2,8 @@
 
 import { Plus } from "lucide-react";
 import { useActionState, useEffect, useRef } from "react";
+import { FormDatePicker } from "@/app/form-date-picker";
+import { getTodayDateInputValue } from "@/lib/date-input";
 import type { ProjectManagementProject } from "@/lib/project-management";
 import { createTask, type TaskActionState } from "./actions";
 
@@ -21,7 +23,7 @@ export function NewTaskForm({ allowSuperadminOnly, projects }: { allowSuperadmin
         <label className="field new-task-description"><span>Leírás</span><textarea disabled={pending} name="description" rows={3} /></label>
         <label className="field"><span>Prioritás</span><select disabled={pending} name="priority" defaultValue="normal"><option value="low">Alacsony</option><option value="normal">Normál</option><option value="high">Magas</option><option value="urgent">Sürgős</option></select></label>
         <label className="field"><span>Láthatóság</span><select disabled={pending} name="visibility" defaultValue="internal"><option value="internal">Csak belső</option><option value="client_visible">Ügyfél is látja</option>{allowSuperadminOnly && <option value="superadmin_only">Csak én (szuperadmin)</option>}</select></label>
-        <label className="field"><span>Határidő</span><input disabled={pending} name="dueDate" type="date" /></label>
+        <label className="field"><span>Határidő</span><FormDatePicker defaultValue={getTodayDateInputValue()} disabled={pending} name="dueDate" /></label>
         <div className="new-task-actions">{state.error && <p className="form-error">{state.error}</p>}{state.success && <p className="form-success">{state.success}</p>}<button className="button" disabled={pending} type="submit">{pending ? "Mentés..." : "Feladat létrehozása"}</button></div>
       </form>
     </details>

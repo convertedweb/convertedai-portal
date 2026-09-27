@@ -19,6 +19,24 @@ export type AdminCustomer = {
   liveProjects: number;
   memberList: AdminCustomerMember[];
   projectList: AdminCustomerProject[];
+  invoiceList: AdminCustomerInvoice[];
+};
+
+export type InvoiceStatus = "draft" | "issued" | "paid" | "overdue" | "cancelled";
+export type InvoiceType = "setup_fee" | "monthly_fee";
+
+export type AdminCustomerInvoice = {
+  id: string;
+  expectedRevenueId: string | null;
+  invoiceNumber: string;
+  invoiceType: InvoiceType;
+  projectId: string;
+  projectName: string;
+  issuedOn: string;
+  paymentDate: string;
+  status: InvoiceStatus;
+  amount: number;
+  currency: "HUF";
 };
 
 export type AdminCustomerMember = {
@@ -56,6 +74,11 @@ export type AdminCustomerProject = {
 };
 
 export type AdminProjectListItem = AdminCustomerProject & {
+  customerId: string;
+  customerName: string;
+};
+
+export type AdminInvoiceListItem = AdminCustomerInvoice & {
   customerId: string;
   customerName: string;
 };
@@ -107,6 +130,20 @@ type MemberRow = {
   created_at: string | null;
 };
 
+type InvoiceRow = {
+  id: string;
+  expected_revenue_id: string | null;
+  organization_id: string;
+  project_id: string;
+  invoice_number: string;
+  invoice_type: InvoiceType;
+  issued_on: string;
+  payment_date: string;
+  status: InvoiceStatus;
+  amount: number | string;
+  currency: "HUF";
+};
+
 function getAdminUserName(user: { email?: string; user_metadata?: { full_name?: string; name?: string } } | null) {
   return user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? user?.email?.split("@")[0] ?? "Admin";
 }
@@ -140,6 +177,7 @@ export const mockAdminCustomers: AdminCustomer[] = [
         createdAt: "2026. augusztus 13.",
       },
     ],
+    invoiceList: [],
     projectList: [
       {
         id: "fogorvos-projekt",
@@ -211,11 +249,12 @@ export async function getAdminCustomers(): Promise<{ adminPermissions: AdminPerm
   const { createClient } = await import("@/lib/supabase/server");
   const supabase = await createClient();
   const dataClient = createAdminClient() ?? supabase;
-  const [{ data: organizations }, { data: projects }, { data: members }, { data: documents }] = await Promise.all([
+  const [{ data: organizations }, { data: projects }, { data: members }, { data: documents }, { data: invoices }] = await Promise.all([
     dataClient.from("organizations").select("id, name, company_name, slug, status, superadmin_only, created_at").is("deleted_at", null).order("created_at", { ascending: false }),
     dataClient.from("projects").select("id, organization_id, name, agent_display_name, category, phone_number, phone_request_type, phone_documents_received, google_access_status, google_access_required, elevenlabs_agent_id, elevenlabs_agent_status, elevenlabs_agent_error, elevenlabs_agent_created_at, prompt_assets_received, knowledge_assets_received, telnyx_status, status, greeting, call_instructions, updated_at").is("deleted_at", null).order("created_at", { ascending: false }),
     dataClient.from("org_members").select("id, organization_id, user_id, role, created_at"),
     dataClient.from("documents").select("project_id, processing_status").is("deleted_at", null),
+    dataClient.from("invoices").select("id, organization_id, project_id, expected_revenue_id, invoice_number, invoice_type, issued_on, payment_date, status, amount, currency").order("issued_on", { ascending: false }),
   ]);
 
   const organizationRows = role === "superadmin"
@@ -225,6 +264,7 @@ export async function getAdminCustomers(): Promise<{ adminPermissions: AdminPerm
   const projectRows = ((projects ?? []) as ProjectRow[]).filter((project) => visibleOrganizationIds.has(project.organization_id));
   const memberRows = ((members ?? []) as MemberRow[]).filter((member) => visibleOrganizationIds.has(member.organization_id));
   const documentRows = (documents ?? []) as DocumentRow[];
+  const invoiceRows = (invoices ?? []) as InvoiceRow[];
   const organizationIds = organizationRows.map((organization) => organization.id);
   const { data: memberProfiles } = organizationIds.length
     ? await supabase.rpc("admin_customer_members", { p_organization_ids: organizationIds })
@@ -263,6 +303,21 @@ export async function getAdminCustomers(): Promise<{ adminPermissions: AdminPerm
         members: memberCount,
         projects: organizationProjects.length,
         liveProjects: organizationProjects.filter((project) => project.status === "live").length,
+        invoiceList: invoiceRows
+          .filter((invoice) => invoice.organization_id === organization.id)
+          .map((invoice) => ({
+            id: invoice.id,
+            expectedRevenueId: invoice.expected_revenue_id,
+            invoiceNumber: invoice.invoice_number,
+            invoiceType: invoice.invoice_type,
+            projectId: invoice.project_id,
+            projectName: organizationProjects.find((project) => project.id === invoice.project_id)?.name ?? "Ismeretlen projekt",
+            issuedOn: invoice.issued_on,
+            paymentDate: invoice.payment_date,
+            status: invoice.status,
+            amount: Number(invoice.amount),
+            currency: invoice.currency,
+          })),
         memberList: organizationMembers.map((member) => {
           const profile = organizationMemberProfiles.find((item) => item.id === member.id);
           return {
@@ -357,5 +412,23 @@ export async function getAdminProjects(): Promise<{ adminPermissions: AdminPermi
         customerName: customer.companyName,
       })),
     ),
+  };
+}
+
+export async function getAdminInvoices(): Promise<{ adminPermissions: AdminPermissionSettings; adminRole: AdminRole | null; canManageCustomers: boolean; invoices: AdminInvoiceListItem[]; isAdmin: boolean; projects: AdminProjectListItem[]; userEmail: string | null }> {
+  const { adminPermissions, adminRole, canManageCustomers, customers, isAdmin, userEmail } = await getAdminCustomers();
+
+  return {
+    adminPermissions,
+    adminRole,
+    canManageCustomers,
+    isAdmin,
+    userEmail,
+    projects: customers.flatMap((customer) => customer.projectList.map((project) => ({ ...project, customerId: customer.id, customerName: customer.companyName }))),
+    invoices: customers.flatMap((customer) => customer.invoiceList.map((invoice) => ({
+      ...invoice,
+      customerId: customer.id,
+      customerName: customer.companyName,
+    }))),
   };
 }

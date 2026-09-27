@@ -1,12 +1,13 @@
 import { getCurrentAdminAccess } from "@/lib/admin-permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const taskStatuses = ["backlog", "planned", "in_progress", "waiting_client", "review", "done"] as const;
+export const taskStatuses = ["backlog", "planned", "todo", "in_progress", "waiting_client", "review", "done"] as const;
 export type TaskStatus = (typeof taskStatuses)[number] | "archived";
 export type TaskPriority = "low" | "normal" | "high" | "urgent";
 
 export const taskStatusLabels: Record<TaskStatus, string> = {
   backlog: "Ötletek",
+  todo: "Tennivaló",
   planned: "Tervezve",
   in_progress: "Folyamatban",
   waiting_client: "Ügyfélre vár",

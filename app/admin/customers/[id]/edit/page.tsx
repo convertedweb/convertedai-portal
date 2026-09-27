@@ -5,8 +5,9 @@ import { getAdminCustomer } from "@/lib/admin-data";
 import { canEditCustomers, canInviteCustomerUsers } from "@/lib/admin-permissions";
 import { CustomerSettingsTabs } from "./customer-settings-tabs";
 
-export default async function AdminCustomerEditPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdminCustomerEditPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
   const { id } = await params;
+  const { tab } = await searchParams;
   const { adminPermissions, adminRole, isAdmin, canManageCustomers, canManageProjects, customer, userEmail } = await getAdminCustomer(id);
 
   if (!isAdmin) {
@@ -56,6 +57,7 @@ export default async function AdminCustomerEditPage({ params }: { params: Promis
         canEditCustomer={canEditCustomers(adminRole, adminPermissions)}
         canInviteCustomerUsers={canInviteCustomerUsers(adminRole, adminPermissions)}
         canManageProjects={canManageProjects}
+        initialTab={tab === "invoices" ? "invoices" : undefined}
         isSuperadmin={adminRole === "superadmin"}
         customer={customer}
       />

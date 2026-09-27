@@ -2,7 +2,9 @@
 
 import { CheckCircle2, ListPlus, X } from "lucide-react";
 import { useActionState, useEffect, useState } from "react";
+import { FormDatePicker } from "@/app/form-date-picker";
 import { createTask, type TaskActionState } from "@/app/admin/tasks/actions";
+import { getTodayDateInputValue } from "@/lib/date-input";
 import type { AssignableAdminUser, TaskPriority } from "@/lib/project-management";
 
 const initialState: TaskActionState = {};
@@ -61,7 +63,7 @@ export function NotificationTaskForm({
             <label className="field"><span>Felelős</span><select defaultValue="" disabled={pending} name="assigneeUserId" required><option disabled value="">Válassz felelőst</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
             <div className="settings-form-grid">
               <label className="field"><span>Prioritás</span><select defaultValue={defaultPriority} disabled={pending} name="priority"><option value="low">Alacsony</option><option value="normal">Normál</option><option value="high">Magas</option><option value="urgent">Sürgős</option></select></label>
-              <label className="field"><span>Határidő</span><input disabled={pending} name="dueDate" required type="date" /></label>
+              <label className="field"><span>Határidő</span><FormDatePicker defaultValue={getTodayDateInputValue()} disabled={pending} name="dueDate" required /></label>
             </div>
             <input name="description" type="hidden" value={description} />
             <input name="notificationKey" type="hidden" value={notificationKey} />

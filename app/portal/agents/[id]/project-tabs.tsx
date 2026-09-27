@@ -5,6 +5,8 @@ import type { LucideIcon } from "lucide-react";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ElevenLabsAgentWidget } from "@/app/elevenlabs-agent-widget";
+import { FormDatePicker } from "@/app/form-date-picker";
+import { getTodayDateInputValue } from "@/lib/date-input";
 import { categoryLabels, documentStatusLabels, googleAccessStatusLabels, phoneRequestLabels, statusLabels, telnyxStatusLabels, type DocumentProcessingStatus, type Project } from "@/lib/project-types";
 import type { ElevenLabsConversation, ElevenLabsKnowledgeBaseDocument } from "@/lib/elevenlabs";
 import { deleteProjectConversation, provisionElevenLabsAgent, updateAgentKnowledgeBaseDocument as updateAdminAgentKnowledgeBaseDocument, updateElevenLabsAgentId, updateProjectAssetFlags, updateProjectGoogleAccess, updateProjectMinuteLimits, updateProjectPhone, updateProjectSettings, type ProjectAdminActionState } from "@/app/admin/projects/[id]/actions";
@@ -40,7 +42,7 @@ const deleteConversationInitialState: ProjectAdminActionState = {};
 const customerAgentKnowledgeInitialState: AgentKnowledgeUpdateState = {};
 const reviewRequestInitialState: ReviewRequestState = {};
 const conversationsPerPage = 10;
-const calendarWeekdays = ["H", "K", "Sz", "Cs", "P", "Sz", "V"];
+const calendarWeekdays = ["Hé", "Ke", "Sze", "Cs", "Pé", "Szo", "Va"];
 
 const phoneDocumentLabels = {
   phone_id_copy: "Igazolvány másolat",
@@ -142,8 +144,14 @@ function DateFilterPicker({ label, onChange, value }: { label: string; onChange:
       {isOpen && (
         <div className="date-filter-popover">
           <div className="date-filter-popover-header">
-            <strong>{monthLabel}</strong>
-            <div>
+            <div className="date-filter-popover-title">
+              <span className="date-filter-popover-icon"><CalendarDays size={16} /></span>
+              <div>
+                <span>Dátum kiválasztása</span>
+                <strong>{monthLabel}</strong>
+              </div>
+            </div>
+            <div className="date-filter-popover-navigation">
               <button aria-label="Előző hónap" onClick={() => setViewDate((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} type="button"><ChevronLeft size={16} /></button>
               <button aria-label="Következő hónap" onClick={() => setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} type="button"><ChevronRight size={16} /></button>
             </div>
@@ -160,6 +168,7 @@ function DateFilterPicker({ label, onChange, value }: { label: string; onChange:
 
               return (
                 <button
+                  aria-label={new Intl.DateTimeFormat("hu-HU", { day: "numeric", month: "long", year: "numeric" }).format(date)}
                   className={`${isSelected ? "selected" : ""} ${isToday ? "today" : ""} ${isMuted ? "muted" : ""}`}
                   key={dateValue}
                   onClick={() => {
@@ -506,7 +515,7 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                         </select></label>
                       </div>
                       <div className="settings-form-grid">
-                        <label className="field date-field"><span>Tervezett indítás</span><div className="date-input-wrap"><CalendarClock size={16} /><input name="plannedLaunchDate" type="date" defaultValue={project.plannedLaunchDate ?? ""} /></div></label>
+                        <label className="field date-field"><span>Tervezett indítás</span><FormDatePicker name="plannedLaunchDate" defaultValue={project.plannedLaunchDate ?? getTodayDateInputValue()} /></label>
                         {project.status === "live" && <label className="field date-field"><span>Indítás ideje</span><div className="date-input-wrap"><CalendarClock size={16} /><input name="launchedAt" type="datetime-local" defaultValue={project.launchedAtInput ?? ""} /></div></label>}
                       </div>
                       {projectSettingsState.error && <p className="form-error">{projectSettingsState.error}</p>}
