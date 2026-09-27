@@ -5,6 +5,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "norpheus AI Portal",
   description: "norpheus AI ügyfélportál",
+  icons: {
+    icon: process.env.NODE_ENV === "development"
+      ? "/portal-favicon-local.png"
+      : "/portal-favicon.png",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
