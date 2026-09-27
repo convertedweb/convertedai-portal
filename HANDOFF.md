@@ -2,7 +2,15 @@
 
 ## Aktuális cél
 
-A Next.js/Supabase ügyfélportál kibővítése közös admin feladatkezelővel, ügyfél- és szerepköralapú láthatósággal, support ticket routinggal, külön értesítési felülettel és robusztus magic-link belépéssel. A mostani munkamenet funkciói elkészültek és helyi commitba rendezhetők; a következő fő feladat az adatbázis-migrációk és a szerepkörös működés integrációs ellenőrzése.
+A Next.js/Supabase ügyfélportál pénzügyi követésének és admin feladatkezelésének élesítése. A funkciók `4acbcd2` commitja és az RLS-javítás `06a9dca` commitja a `master` ágon és a GitHubon van. A `4acbcd2` commitból épült, ellenőrzött image fut a DigitalOcean Dropleten; a pénzügyi táblák RLS-javítása production Supabase-ben alkalmazva, a migráció a repóban szerepel.
+
+## Legutóbbi kiadás (2026-09-27)
+
+- Pénzügyi admin felület (`/admin/finance`): ügyfélszámlák, havi díjtervek és várható bevételek. Új migrációk: `20260926190122`, `20260926191139`, `20260926191639`, `20260927114047`.
+- Feladatoknál új `todo` státusz, nézet- és dátumkezelési finomítások; új migráció: `20260927160342`.
+- A pénzügyi táblák kilenc RLS policyját a `20260927184551_secure_financial_visibility.sql` tranzakciósan szűkíti: a normál admin csak nem `superadmin_only` szervezet sorait olvashatja és módosíthatja. A production módosítás a felhasználó kifejezett jóváhagyásával történt, a Supabase historyban `20260927184914` verzióval szerepel. A régi policy-definíciók a fenti korábbi migrációkban szerepelnek; a módosítás adatot nem törölt.
+- GitHub Actions build: `36341751610`, sikeres. Éles image: `ghcr.io/convertedweb/convertedai-portal:4acbcd2f3aa090a27e8dfbe18928e5aab2d308e6` a `/opt/convertedai-portal` Compose stackben. A korábbi `13f88f7053fd563f37142b0a12c402b351e6bc66` image tag rollbackhoz ismert. A Caddy/n8n stack változatlan.
+- A távoli Supabase migrációtörténet ugyanazokat a pénzügyi/feladat sémaváltozásokat más időbélyeggel tartalmazza, mint a helyi fájlok. Emiatt későbbi `supabase db push` előtt a historyt tudatosan egyeztesd; ezeket a migrációkat ne alkalmazd újra.
 
 ## Elkészült
 
@@ -62,16 +70,11 @@ A Next.js/Supabase ügyfélportál kibővítése közös admin feladatkezelővel
 
 ## Következő konkrét lépések
 
-1. Ellenőrizd a hat új migráció sorrendjét, constraintjeit és RLS policyjait; hasonlítsd össze a kapcsolt Supabase projekt migrációtörténetével. Ne írj át már alkalmazott migrációt.
-2. Teszteld manuálisan külön superadmin, normál admin és ügyfél fiókkal:
-   - superadmin-only ügyfél/feladat láthatóság;
-   - task létrehozás, szerkesztés, Kanban mozgatás és aktivitásidővonal;
-   - értesítés→task jelölés és ticket routing;
-   - ügyfél számára látható taskok.
-3. Ellenőrizd helyben és production callbackkel a TokenHash magic-link folyamatot a README-ben lévő Supabase sablonnal.
-4. Állíts be nem interaktív ESLint konfigurációt és Node 22.6+ vagy külön TypeScript tesztfuttatót.
-5. Ha az integrációs ellenőrzés zöld, deployold a commitot a meglévő GitHub Actions/GHCR/DigitalOcean folyamaton keresztül.
-6. Következő termékfunkcióként javasolt: belső/ügyfélkommentek és feladatfájlok.
+1. Valódi superadmin, normál admin és ügyfél fiókkal teszteld a pénzügyi képernyőket és a közvetlen Supabase Data API-t. A normál admin nem kaphat `superadmin_only` szervezethez tartozó számla-, díjterv- vagy bevételsort, és nem írhat ilyet.
+2. Egyeztesd a Supabase migration historyt a repó helyi verzióival, mielőtt CLI-alapú `db push` futna. Már alkalmazott migrációt ne írd át és ne futtasd újra.
+3. Vizsgáld meg a Supabase security advisor három figyelmeztetését: `admin_customer_members` SECURITY DEFINER függvény [anon](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) és [authenticated](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable) szerepkörből hívható; a [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) ki van kapcsolva. A jogosultságok változtatása előtt ellenőrizd a függvény tényleges használatát.
+4. Teszteld manuálisan a feladatstátusz-váltást, Kanban/listanézetet, értesítésből feladatkészítést, ticket routingot és a magic-link production callbacket.
+5. Állíts be nem interaktív ESLint konfigurációt és Node 22.6+ vagy külön TypeScript tesztfuttatót; utána futtasd a teljes tesztcsomagot.
 
 ## Fontos döntések
 
@@ -85,18 +88,25 @@ A Next.js/Supabase ügyfélportál kibővítése közös admin feladatkezelővel
 
 ## Ellenőrzés
 
+- 2026-09-27: `npm run build` sikeres, 27 oldal generálva; `npx tsc --noEmit --incremental false` sikeres a build után. A builddel párhuzamos első TS-futás a generálódó `.next/types` miatt versenyhelyzetben hibázott, ismétléskor tiszta volt.
+- Auth URL tesztek: 2/2 sikeres (TypeScript külön fordítással futtatva a jelenlegi Node környezetben).
+- GitHub Actions image build sikeres; a production konténer `healthy`, az image SHA megfelel a kiadott commitnak.
+- Production RLS visszaolvasás: mindhárom pénzügyi táblán a SELECT, INSERT és UPDATE policy tartalmazza a `superadmin_only` szervezeti korlátozást.
+- Külső smoke: `https://portal.convertedweb.com/api/health` 200; `/admin/finance` 307 a bejelentkezésre; `https://app.convertedweb.com/` 200.
+- `git diff --check` sikeres; célzott titokmintakeresés nem talált credentialt a kiadott kódban.
 - `npx tsc --noEmit --incremental false`: sikeres 2026-09-26.
 - `npm run build`: sikeres 2026-09-26; fordítás, típusellenőrzés és 26 oldal generálása rendben.
 - Csak olvasási Supabase ellenőrzés: `activity_logs` JSON `taskId` szűrés sikeres (`activity-filter-ok rows=1`).
 - `git diff --check`: sikeres.
 - Titokminták célzott keresése nem talált commitolandó credentialt.
-- `npm run lint`: nem futott le érdemben, mert a projekt jelenlegi `next lint` parancsa interaktív ESLint-beállítást kér.
+- `npm run lint`: 2026-09-27-én sem futott le érdemben, mert a projekt jelenlegi `next lint` parancsa interaktív ESLint-beállítást kér.
 - `node --test --experimental-strip-types tests/*.test.ts`: a jelenlegi Node 20 környezetben nem fut (`--experimental-strip-types` Node 22.6+ szükséges).
 - Böngészős, bejelentkezett admin ellenőrzés nem történt meg, mert a helyi in-app böngészőben nem volt aktív admin session.
 
 ## Ismert kockázatok és megjegyzések
 
-- A lokális migrációfájlok és a kapcsolt Supabase projekt migrációtörténete még nincs ebben a handoffban bizonyítottan szinkronizálva.
-- A build sikeres, de a szerepkörös és tenant-határos kézi integrációs teszt még kötelező deployment előtt.
+- A lokális migrációfájlok és a kapcsolt Supabase projekt historyjának időbélyegei eltérnek; nem biztonságos vakon `supabase db push` parancsot futtatni.
+- A build, RLS-szabályellenőrzés és nyilvános smoke sikeres; bejelentkezett szerepkörös, tenant-határos kézi integrációs teszt még hiányzik.
+- A Supabase security advisor három, az RLS-módosítástól független figyelmeztetést mutat; lásd a következő lépéseket.
 - A régi aktivitásbejegyzések nem tartalmaznak minden mezőhöz előtte/utána értéket; a részletes változáslista az új mentésektől kezdve teljes.
 - A generált `supabase/.temp/` és `tsconfig.tsbuildinfo` nincs commitolva.
