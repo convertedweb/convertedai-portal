@@ -2,7 +2,16 @@
 
 ## Aktuális cél
 
-A Next.js/Supabase ügyfélportál pénzügyi követésének és admin feladatkezelésének élesítése. A funkciók `4acbcd2` commitja és az RLS-javítás `06a9dca` commitja a `master` ágon és a GitHubon van. A `4acbcd2` commitból épült, ellenőrzött image fut a DigitalOcean Dropleten; a pénzügyi táblák RLS-javítása production Supabase-ben alkalmazva, a migráció a repóban szerepel.
+A superadmin számára biztonságos, időkorlátos admin- és ügyfélfiók-megszemélyesítés előkészítése. A megvalósítás helyben elkészült és ellenőrzött, de nincs pusholva, deployolva, és a `20260927193155_add_impersonation_sessions.sql` migráció nincs alkalmazva külső Supabase projekten.
+
+## Legutóbbi fejlesztés (2026-09-29)
+
+- A superadmin a Felhasználók oldalon admin- vagy ügyfélfiókhoz egyszer használható, 10 percig érvényes belépési linket készíthet. Superadmin célfiók megszemélyesítése tiltott.
+- A link létrehozását szerveroldali szerepkör-ellenőrzés, normalizált célútvonal és SHA-256 tokenlenyomat védi; a nyers token nem kerül adatbázisba.
+- Az `/auth/impersonate/[id]` route atomikusan elfogyasztja a sessiont, Supabase OTP-vel belépteti a célfelhasználót, majd httpOnly megszemélyesítési cookie-t állít be.
+- Az admin- és portállayout figyelmeztető sávban jelzi az aktív megszemélyesítést; kijelentkezéskor a cookie is törlődik.
+- Az admin naplóoldal külön listázza a megszemélyesítési sessionöket és azok állapotát.
+- Az új `impersonation_sessions` tábla RLS-sel védett, az `anon` és `authenticated` szerepkörök közvetlen hozzáférése vissza van vonva; a hozzáférés csak szerveroldali admin kliensen keresztül történik.
 
 ## Legutóbbi kiadás (2026-09-27)
 
@@ -60,6 +69,10 @@ A Next.js/Supabase ügyfélportál pénzügyi követésének és admin feladatke
 
 ## Érintett fő területek
 
+- `app/admin/users/`, `app/auth/impersonate/`, `lib/impersonation.ts`
+- `app/impersonation-banner.tsx`, `app/admin/layout.tsx`, `app/portal/layout.tsx`, `app/auth/signout/route.ts`
+- `app/admin/logs/page.tsx`, `app/globals.css`
+- `supabase/migrations/20260927193155_add_impersonation_sessions.sql`
 - `app/admin/tasks/`, `lib/project-management.ts`, `app/globals.css`
 - `app/admin/notifications/`, `app/admin/layout.tsx`, `lib/tasks.ts`
 - `app/portal/support/`, `app/admin/messages/`, `lib/support.ts`
@@ -70,11 +83,13 @@ A Next.js/Supabase ügyfélportál pénzügyi követésének és admin feladatke
 
 ## Következő konkrét lépések
 
-1. Valódi superadmin, normál admin és ügyfél fiókkal teszteld a pénzügyi képernyőket és a közvetlen Supabase Data API-t. A normál admin nem kaphat `superadmin_only` szervezethez tartozó számla-, díjterv- vagy bevételsort, és nem írhat ilyet.
-2. Egyeztesd a Supabase migration historyt a repó helyi verzióival, mielőtt CLI-alapú `db push` futna. Már alkalmazott migrációt ne írd át és ne futtasd újra.
-3. Vizsgáld meg a Supabase security advisor három figyelmeztetését: `admin_customer_members` SECURITY DEFINER függvény [anon](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) és [authenticated](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable) szerepkörből hívható; a [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) ki van kapcsolva. A jogosultságok változtatása előtt ellenőrizd a függvény tényleges használatát.
-4. Teszteld manuálisan a feladatstátusz-váltást, Kanban/listanézetet, értesítésből feladatkészítést, ticket routingot és a magic-link production callbacket.
-5. Állíts be nem interaktív ESLint konfigurációt és Node 22.6+ vagy külön TypeScript tesztfuttatót; utána futtasd a teljes tesztcsomagot.
+1. A migráció alkalmazása előtt egyeztesd a cél Supabase projektet és annak migration historyját. Éles adatbázis-módosítás csak kifejezett jóváhagyással történhet.
+2. A migráció után valódi superadminnal készíts linket külön normál admin- és ügyfélfiókhoz, majd privát böngészőablakban ellenőrizd a céloldalt, a figyelmeztető sávot és a kijelentkezést.
+3. Ellenőrizd, hogy lejárt, már felhasznált, hibás és superadmin célú link nem használható, valamint hogy normál admin közvetlenül nem tud sessiont készíteni vagy olvasni.
+4. Ellenőrizd az admin naplóoldalon a létrehozott, felhasznált és lejárt sessionök megjelenését; szükség esetén dönts a régi sessionök későbbi takarításáról.
+5. Valódi superadmin, normál admin és ügyfél fiókkal teszteld a pénzügyi képernyőket és a közvetlen Supabase Data API-t. A normál admin nem kaphat `superadmin_only` szervezethez tartozó számla-, díjterv- vagy bevételsort, és nem írhat ilyet.
+6. Vizsgáld meg a Supabase security advisor három figyelmeztetését: `admin_customer_members` SECURITY DEFINER függvény [anon](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) és [authenticated](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable) szerepkörből hívható; a [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) ki van kapcsolva. A jogosultságok változtatása előtt ellenőrizd a függvény tényleges használatát.
+7. Állíts be nem interaktív ESLint konfigurációt és Node 22.6+ vagy külön TypeScript tesztfuttatót; utána futtasd a teljes tesztcsomagot.
 
 ## Fontos döntések
 
@@ -88,6 +103,12 @@ A Next.js/Supabase ügyfélportál pénzügyi követésének és admin feladatke
 
 ## Ellenőrzés
 
+- 2026-09-29: `npm run build` sikeres, az új `/auth/impersonate/[id]` route-tal együtt 27 oldal generálva.
+- 2026-09-29: `npx tsc --noEmit --incremental false` sikeres.
+- 2026-09-29: `git diff --check` sikeres.
+- 2026-09-29: `npm run lint` nem futott le érdemben, mert a projekt `next lint` parancsa továbbra is interaktív ESLint-beállítást kér.
+- 2026-09-29: a teljes TypeScript tesztcsomag nem futott; a helyi Node `v20.19.5`, a repó tesztparancsa Node 22.6+ `--experimental-strip-types` támogatását igényli.
+- Bejelentkezett, szerepkörös böngészős teszt és a migráció külső Supabase projekten való kipróbálása még nem történt meg.
 - 2026-09-27: `npm run build` sikeres, 27 oldal generálva; `npx tsc --noEmit --incremental false` sikeres a build után. A builddel párhuzamos első TS-futás a generálódó `.next/types` miatt versenyhelyzetben hibázott, ismétléskor tiszta volt.
 - Auth URL tesztek: 2/2 sikeres (TypeScript külön fordítással futtatva a jelenlegi Node környezetben).
 - GitHub Actions image build sikeres; a production konténer `healthy`, az image SHA megfelel a kiadott commitnak.
@@ -105,6 +126,9 @@ A Next.js/Supabase ügyfélportál pénzügyi követésének és admin feladatke
 
 ## Ismert kockázatok és megjegyzések
 
+- A megszemélyesítési funkció csak a migráció alkalmazása után működik. A migration history eltérései miatt ne futtass vakon `supabase db push` parancsot.
+- A session már az OTP-ellenőrzés előtt elfogyasztásra kerül; egy sikertelen vagy megszakadt beváltás után új linket kell készíteni. Ez csökkenti az újrajátszás kockázatát, de kézi UX-ellenőrzést igényel.
+- A megszemélyesítés a célfelhasználó valódi Supabase sessionjét hozza létre; a figyelmeztető cookie csak a felületi jelzéshez és az audit-kontextushoz szolgál. A célfiók jogosultságait ezért minden route-on a normál alkalmazásszabályoknak kell korlátozniuk.
 - A lokális migrációfájlok és a kapcsolt Supabase projekt historyjának időbélyegei eltérnek; nem biztonságos vakon `supabase db push` parancsot futtatni.
 - A build, RLS-szabályellenőrzés és nyilvános smoke sikeres; bejelentkezett szerepkörös, tenant-határos kézi integrációs teszt még hiányzik.
 - A Supabase security advisor három, az RLS-módosítástól független figyelmeztetést mutat; lásd a következő lépéseket.

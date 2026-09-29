@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getAuthRequestUrl, getSafeAuthRedirect } from "@/lib/auth-urls";
+import { IMPERSONATION_COOKIE } from "@/lib/impersonation";
 
 export async function GET(request: Request) {
   const requestUrl = getAuthRequestUrl(request);
@@ -23,5 +24,6 @@ export async function GET(request: Request) {
   );
 
   await supabase.auth.signOut();
+  response.cookies.delete(IMPERSONATION_COOKIE);
   return response;
 }

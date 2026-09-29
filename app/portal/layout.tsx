@@ -2,17 +2,19 @@ import { Bell, LogOut, Settings, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import NavLinks from "@/app/portal/nav-links";
+import { ImpersonationBanner } from "@/app/impersonation-banner";
 import { ThemeToggle } from "@/app/theme-toggle";
 import { getPortalUserSummary, getProjects } from "@/lib/data";
 import { getCurrentAdminAccess } from "@/lib/admin-permissions";
 import { getPortalSupportAlertCount } from "@/lib/support";
 import { getPortalTasks } from "@/lib/tasks";
+import { getActiveImpersonation } from "@/lib/impersonation";
 
 export default async function PortalLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const adminAccess = await getCurrentAdminAccess();
   if (adminAccess.role) redirect("/admin");
 
-  const [userSummary, projects, supportAlertCount] = await Promise.all([getPortalUserSummary(), getProjects(), getPortalSupportAlertCount()]);
+  const [impersonation, userSummary, projects, supportAlertCount] = await Promise.all([getActiveImpersonation(), getPortalUserSummary(), getProjects(), getPortalSupportAlertCount()]);
   const tasks = getPortalTasks(projects);
   const notificationCount = tasks.length + supportAlertCount;
 
@@ -38,6 +40,7 @@ export default async function PortalLayout({ children }: Readonly<{ children: Re
         </div>
       </aside>
       <main className="main">
+        {impersonation && <ImpersonationBanner actorEmail={impersonation.actorEmail} actorName={impersonation.actorName} />}
         {children}
       </main>
     </div>

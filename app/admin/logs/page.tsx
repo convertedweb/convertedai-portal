@@ -1,4 +1,4 @@
-import { Activity, CirclePause, Users } from "lucide-react";
+import { Activity, CirclePause, KeyRound, Users } from "lucide-react";
 import Link from "next/link";
 import { getAdminCustomers } from "@/lib/admin-data";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -25,6 +25,17 @@ type ActivityLogItem = {
   id: string;
   projectName: string;
   title: string;
+};
+
+type ImpersonationLogItem = {
+  actorEmail: string;
+  actorName: string;
+  createdAt: string;
+  id: string;
+  status: string;
+  targetEmail: string;
+  targetName: string;
+  targetRole: string;
 };
 
 function formatDateTime(value: string | null | undefined) {
@@ -128,6 +139,49 @@ async function getActivityLogs(): Promise<ActivityLogItem[]> {
     });
 }
 
+async function getImpersonationLogs(): Promise<ImpersonationLogItem[]> {
+  const adminSupabase = createAdminClient();
+  if (!adminSupabase) return [];
+
+  const [{ data: sessions, error }, { data: authUsersData }] = await Promise.all([
+    adminSupabase
+      .from("impersonation_sessions")
+      .select("id, actor_user_id, target_user_id, target_email, target_role, created_at, expires_at, consumed_at")
+      .order("created_at", { ascending: false })
+      .limit(100),
+    adminSupabase.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+  ]);
+
+  if (error) {
+    console.error("Impersonation audit log query failed", error);
+    return [];
+  }
+
+  const userMap = new Map((authUsersData.users ?? []).map((user) => [user.id, user]));
+  const now = Date.now();
+
+  return (sessions ?? []).map((session) => {
+    const actor = userMap.get(session.actor_user_id);
+    const target = userMap.get(session.target_user_id);
+    const status = session.consumed_at
+      ? "Felhasználva"
+      : new Date(session.expires_at).getTime() <= now
+        ? "Lejárt"
+        : "Aktív";
+
+    return {
+      actorEmail: actor?.email ?? "Nincs e-mail",
+      actorName: actor ? getName(actor) : "Ismeretlen superadmin",
+      createdAt: formatDateTime(session.created_at),
+      id: session.id,
+      status,
+      targetEmail: session.target_email,
+      targetName: target ? getName(target) : session.target_email,
+      targetRole: session.target_role === "admin" ? "Admin" : "Ügyfél",
+    };
+  });
+}
+
 export default async function AdminLogsPage() {
   const { canManageProjects, isAdmin, userEmail } = await getAdminCustomers();
 
@@ -146,7 +200,7 @@ export default async function AdminLogsPage() {
     );
   }
 
-  const [activityLogs, logs] = await Promise.all([getActivityLogs(), getUserLogs()]);
+  const [activityLogs, impersonationLogs, logs] = await Promise.all([getActivityLogs(), getImpersonationLogs(), getUserLogs()]);
   const signedInUsers = logs.filter((item) => item.lastSignInAt !== "Még nem lépett be").length;
 
   return (
@@ -155,14 +209,44 @@ export default async function AdminLogsPage() {
         <div>
           <p className="eyebrow">Superadmin</p>
           <h1>Napló</h1>
-          <p className="intro-copy">Felhasználói aktivitás áttekintése superadmin fiókok nélkül.</p>
+          <p className="intro-copy">Felhasználói aktivitások és superadmin biztonsági események egy helyen.</p>
         </div>
       </div>
 
       <div className="stats">
         <div className="stat"><div className="stat-label">Ügyfél aktivitás</div><div className="stat-value">{activityLogs.length}</div></div>
+        <div className="stat"><div className="stat-label">Belépés más fiókba</div><div className="stat-value">{impersonationLogs.length}</div></div>
         <div className="stat"><div className="stat-label">Listázott felhasználó</div><div className="stat-value">{logs.length}</div></div>
         <div className="stat"><div className="stat-label">Volt belépés</div><div className="stat-value">{signedInUsers}</div></div>
+      </div>
+
+      <div className="section-heading permissions-heading">
+        <h2>Superadmin belépési napló</h2>
+        <span>{impersonationLogs.length} esemény</span>
+      </div>
+
+      <div className="admin-table users-section-table">
+        <div className="admin-table-head admin-impersonation-log-row">
+          <span>Célfiók</span>
+          <span>Superadmin</span>
+          <span>Fióktípus</span>
+          <span>Állapot</span>
+          <span>Létrehozva</span>
+        </div>
+        {impersonationLogs.length ? impersonationLogs.map((item) => (
+          <div className="admin-table-row admin-impersonation-log-row" key={item.id}>
+            <div className="customer-cell">
+              <div className="customer-icon"><KeyRound size={17} /></div>
+              <div><strong>{item.targetName}</strong><span>{item.targetEmail}</span></div>
+            </div>
+            <div className="customer-cell compact-cell"><div><strong>{item.actorName}</strong><span>{item.actorEmail}</span></div></div>
+            <span>{item.targetRole}</span>
+            <span className="access-status">{item.status}</span>
+            <span className="detail-value">{item.createdAt}</span>
+          </div>
+        )) : (
+          <div className="empty-state">Még nem készült másik fiókhoz belépési link.</div>
+        )}
       </div>
 
       <div className="section-heading permissions-heading">

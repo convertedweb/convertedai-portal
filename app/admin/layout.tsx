@@ -2,17 +2,19 @@ import { Bell, LogOut, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import AdminNavLinks from "@/app/admin/admin-nav-links";
+import { ImpersonationBanner } from "@/app/impersonation-banner";
 import { ThemeToggle } from "@/app/theme-toggle";
 import { getAdminProjects } from "@/lib/admin-data";
 import { getAdminSupportAlertCount } from "@/lib/support";
 import { getAdminTasks } from "@/lib/tasks";
+import { getActiveImpersonation } from "@/lib/impersonation";
 
 export const metadata: Metadata = {
   title: "norpheus AI Admin",
 };
 
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const { adminPermissions, adminRole, isAdmin, projects, userEmail, userName } = await getAdminProjects();
+  const [{ adminPermissions, adminRole, isAdmin, projects, userEmail, userName }, impersonation] = await Promise.all([getAdminProjects(), getActiveImpersonation()]);
   const supportAlertCount = isAdmin ? await getAdminSupportAlertCount() : 0;
   const tasks = isAdmin ? getAdminTasks(projects) : [];
   const notificationCount = tasks.length + supportAlertCount;
@@ -39,6 +41,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
         </div>
       </aside>
       <main className="main">
+        {impersonation && <ImpersonationBanner actorEmail={impersonation.actorEmail} actorName={impersonation.actorName} />}
         {children}
       </main>
     </div>

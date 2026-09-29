@@ -1,5 +1,6 @@
-import { ArrowRight, CirclePause, Pencil, Plus, Users } from "lucide-react";
+import { CirclePause, Pencil, Plus, Users } from "lucide-react";
 import Link from "next/link";
+import { ImpersonationButton } from "@/app/admin/users/impersonation-button";
 import { getAdminCustomers } from "@/lib/admin-data";
 import { getAdminRoleLabel } from "@/lib/admin-permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -148,15 +149,18 @@ export default async function AdminUsersPage() {
         </div>
         {internalUsers.length ? internalUsers.map((user) => (
           user.role === "admin" ? (
-            <Link className="admin-table-row admin-table-row-link admin-internal-users-table-row" href={`/admin/users/${user.id}/edit`} key={user.id}>
+            <div className="admin-table-row admin-internal-users-table-row" key={user.id}>
               <div className="customer-cell">
                 <div className="customer-icon"><Users size={17} /></div>
                 <div><strong>{user.name}</strong><span>{user.email}</span></div>
               </div>
               <span className="access-status">{internalRoleLabels[user.role]}</span>
               <span className="detail-value">{user.createdAt}</span>
-              <span className="icon-button" aria-label={`${user.name} szerkesztése`} title="Szerkesztés"><Pencil size={16} /></span>
-            </Link>
+              <div className="user-row-actions">
+                <ImpersonationButton targetEmail={user.email} targetName={user.name} targetUserId={user.id} />
+                <Link className="icon-button" aria-label={`${user.name} szerkesztése`} href={`/admin/users/${user.id}/edit`} title="Szerkesztés"><Pencil size={16} /></Link>
+              </div>
+            </div>
           ) : (
             <div className="admin-table-row admin-internal-users-table-row" key={user.id}>
               <div className="customer-cell">
@@ -187,7 +191,7 @@ export default async function AdminUsersPage() {
           <span />
         </div>
         {users.length ? users.map((user) => (
-          <Link className="admin-table-row admin-table-row-link admin-users-table-row" href={`/admin/customers/${user.customerId}/edit`} key={user.id}>
+          <div className="admin-table-row admin-users-table-row" key={user.id}>
             <div className="customer-cell">
               <div className="customer-icon"><Users size={17} /></div>
               <div><strong>{user.customerName}</strong><span>{user.email}</span></div>
@@ -195,8 +199,11 @@ export default async function AdminUsersPage() {
             <span>{user.clientName}</span>
             <span className="access-status">{memberRoleLabels[user.role]}</span>
             <span className="detail-value">{user.createdAt}</span>
-            <ArrowRight className="arrow" size={18} />
-          </Link>
+            <div className="user-row-actions">
+              <ImpersonationButton targetEmail={user.email} targetName={user.customerName} targetUserId={user.userId} />
+              <Link className="icon-button" aria-label={`${user.customerName} szerkesztése`} href={`/admin/customers/${user.customerId}/edit`} title="Szerkesztés"><Pencil size={16} /></Link>
+            </div>
+          </div>
         )) : (
           <div className="empty-state">Még nincs portál felhasználó.</div>
         )}
