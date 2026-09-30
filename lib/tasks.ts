@@ -31,7 +31,7 @@ export function getPortalTasks(projects: Project[]): TaskItem[] {
       });
     }
 
-    if (project.category === "voice_agent" && project.googleAccessRequired && !project.googleAccountEmail) {
+    if ((project.category === "voice_agent" || project.category === "meta_lead_caller") && project.googleAccessRequired && !project.googleAccountEmail) {
       tasks.push({
         title: "Google hozzáférés később megadható",
         detail: project.name,
@@ -49,7 +49,7 @@ export function getAdminTasks(projects: AdminProjectListItem[]): TaskItem[] {
     const tasks: TaskItem[] = [];
     const detail = `${project.customerName} · ${project.name}`;
     const baseHref = `/admin/projects/${project.id}?from=tasks`;
-    const isVoiceAgent = project.category === "voice_agent";
+    const isVoiceAgent = project.category === "voice_agent" || project.category === "meta_lead_caller";
     const needsPhoneDocuments = project.phoneRequestType === "local_company" || project.phoneRequestType === "local_private";
     const agentConfigured = Boolean(
       project.promptAssetsReceived ||

@@ -14,11 +14,11 @@ function requiredText(value: FormDataEntryValue | null) {
 }
 
 function parseCategory(value: FormDataEntryValue | null): ProjectCategory {
-  return value === "chatbot" || value === "automation" || value === "voice_agent" ? value : "voice_agent";
+  return value === "chatbot" || value === "automation" || value === "voice_agent" || value === "meta_lead_caller" ? value : "voice_agent";
 }
 
 function parsePhoneRequestType(category: ProjectCategory, value: string): PhoneRequestType | null {
-  if (category !== "voice_agent") return null;
+  if (category !== "voice_agent" && category !== "meta_lead_caller") return null;
   if (value === "local_company" || value === "local_private") return value;
   return "hu_21";
 }
@@ -169,7 +169,8 @@ export async function createProject(_previousState: CreateProjectState, formData
   const parsedGooglePasswordShareUrl = parseOptionalUrl(googlePasswordShareUrl);
   const phoneRequestType = parsePhoneRequestType(category, phonePreference);
   const requiresAgentName = category !== "automation";
-  const wantsLocalPhone = category === "voice_agent" && phonePreference.startsWith("local");
+  const isPhoneAgent = category === "voice_agent" || category === "meta_lead_caller";
+  const wantsLocalPhone = isPhoneAgent && phonePreference.startsWith("local");
   const companyRegistrationFile = getUploadFile(formData, "phoneCompanyRegistration");
   const utilityBillFile = getUploadFile(formData, "phoneUtilityBill");
   const idCopyFile = getUploadFile(formData, "phoneIdCopy");
@@ -264,7 +265,7 @@ export async function createProject(_previousState: CreateProjectState, formData
       greeting,
       call_instructions: callInstructions,
       handoff_instructions: handoffInstructions,
-      telnyx_status: category === "voice_agent" ? "requested" : "pending",
+      telnyx_status: isPhoneAgent ? "requested" : "pending",
       status: "draft",
     })
     .select("id")

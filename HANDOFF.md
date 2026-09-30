@@ -2,7 +2,19 @@
 
 ## Aktuális cél
 
-A superadmin számára biztonságos, időkorlátos admin- és ügyfélfiók-megszemélyesítés előkészítése. A megvalósítás helyben elkészült és ellenőrzött, de nincs pusholva, deployolva, és a `20260927193155_add_impersonation_sessions.sql` migráció a remote migration history szerint már alkalmazva van (2026-09-29 ellenőrzés), de kézi szerepkörös teszt még nem történt.
+A `meta_lead_caller` projektkategória bevezetése a portál és az admin teljes projektlétrehozási/szerkesztési folyamatába. A kód és a migráció helyben elkészült, a statikus ellenőrzések és a beküldés előtti ügyféloldali böngészős smoke teszt sikeres. A `20260930120000_add_meta_lead_caller_project_category.sql` migráció nincs alkalmazva; a kapcsolt helyi app valószínűleg az éles Supabase projektet használja, ezért alkalmazása és tesztrekord létrehozása csak kifejezett jóváhagyással történhet.
+
+## Meta lead hívó asszisztens kategória (2026-09-30)
+
+- Új `meta_lead_caller` projektkategória és magyar címke került a közös projekttípusokba.
+- Az ügyfélportál újprojekt-varázslója külön Meta lead kártyát és négylépéses, kimenő hívásra/Google Calendarra szabott szövegezést kapott.
+- A Meta lead kategória a voice agenthez hasonlóan kezeli az asszisztensnevet, telefonszám-igénylést, Telnyx státuszt, Google-hozzáférést és admin teendőket.
+- Az admin ügyféloldali projektlétrehozó és a projekt szerkesztője elfogadja az új kategóriát.
+- A portál projektlistája és navigációja a voice agenteket és Meta lead hívókat közösen „Telefonos asszisztensek” alatt jeleníti meg.
+- Új, még nem alkalmazott migráció: `supabase/migrations/20260930120000_add_meta_lead_caller_project_category.sql`; ez bővíti a `projects_category_check` constraintet.
+- Ellenőrzés 2026-09-30: `npm test` 2/2 sikeres; `npx tsc --noEmit --incremental false` sikeres; `npm run build` sikeres, 27 oldal; `git diff --check` sikeres.
+- Böngészős smoke: aktív ügyfél-sessionnel az új kategória megjelent, kiválasztható volt, és a Meta-specifikus négylépéses onboarding helyesen renderelődött. A beküldést szándékosan nem végeztem el, hogy ne jöjjön létre tesztadat a kapcsolt adatbázisban.
+- Következő konkrét lépés: a cél Supabase projekt és a helyi/éles tesztadat-kezelés felhasználói megerősítése után alkalmazd a migrációt, majd hozz létre egy teszt Meta lead projektet és ellenőrizd admin- és ügyféloldalon. Ezután lehet push/deploy; push és deploy eddig nem történt.
 
 ## Átadás Codexnek (2026-09-30)
 
@@ -12,6 +24,7 @@ A superadmin számára biztonságos, időkorlátos admin- és ügyfélfiók-megs
 - Az új `start_date` migráció a kapcsolt (valószínűleg éles) Supabase projekten már alkalmazva van; a helyi és az éles app ugyanazt az adatbázist használja.
 - Még nem volt kézi, bejelentkezett böngészős teszt: új feladat létrehozása felelőssel/státusszal/kezdő dátummal, szerkesztés, lista nézet dátumtartomány, megszemélyesítés.
 - Javasolt következő lépések: kézi teszt fent; ESLint bekötése (új devDependency, jóváhagyás kell); becsült idő, címkék, checklist mezők; security advisor figyelmeztetések.
+- A fenti bekezdés a megszemélyesítés/feladatfejlesztés korábbi átadása. A legfrissebb munkafolyam a `Meta lead hívó asszisztens kategória (2026-09-30)` szakaszban van.
 
 ## Feladatűrlap-bővítések (2026-09-29)
 

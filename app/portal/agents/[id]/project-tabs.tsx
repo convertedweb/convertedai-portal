@@ -205,7 +205,7 @@ function getMonthLabel(monthKey: string) {
 type OnboardingItemStatus = "ok" | "warning" | "missing";
 
 function getOnboardingOverview(project: Project, phoneDocumentStatus: string) {
-  const isVoiceAgent = project.category === "voice_agent";
+  const isVoiceAgent = project.category === "voice_agent" || project.category === "meta_lead_caller";
   const needsPhoneDocuments = project.phoneRequestType === "local_company" || project.phoneRequestType === "local_private";
   const hasPhoneDocuments = phoneDocumentStatus === "Portálon feltöltve" || phoneDocumentStatus === "E-mailben megkapva";
   const phoneRequestValue = !isVoiceAgent
@@ -510,6 +510,7 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                         <label className="field"><span>Projekt neve</span><input name="projectName" required defaultValue={project.name} /></label>
                         <label className="field"><span>Kategória</span><select name="category" defaultValue={project.category}>
                           <option value="voice_agent">{categoryLabels.voice_agent}</option>
+                          <option value="meta_lead_caller">{categoryLabels.meta_lead_caller}</option>
                           <option value="chatbot">{categoryLabels.chatbot}</option>
                           <option value="automation">{categoryLabels.automation}</option>
                         </select></label>

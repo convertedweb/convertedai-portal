@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Bot, Building2, Check, FileText, FolderKanban, KeyRound, Languages, Layers3, LinkIcon, Mail, MessageSquareText, Mic2, Phone, Rocket, ShieldCheck, Smartphone, Sparkles, UploadCloud, UserRound, Workflow } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot, Building2, Check, Facebook, FileText, FolderKanban, KeyRound, Languages, Layers3, LinkIcon, Mail, MessageSquareText, Mic2, Phone, Rocket, ShieldCheck, Smartphone, Sparkles, UploadCloud, UserRound, Workflow } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
 import type { ProjectCategory } from "@/lib/project-types";
 import { createProject, type CreateProjectState } from "./actions";
@@ -11,6 +11,7 @@ type PortalProjectCategory = Exclude<ProjectCategory, "ui_ux_design" | "website"
 const categories: Array<{ id: PortalProjectCategory; title: string; description: string; icon: typeof Bot }> = [
   { id: "chatbot", title: "Chatbot", description: "Webes vagy ügyfélszolgálati szöveges asszisztens.", icon: MessageSquareText },
   { id: "voice_agent", title: "AI Voice Agent", description: "Telefonos asszisztens hívások kezelésére.", icon: Bot },
+  { id: "meta_lead_caller", title: "Meta lead hívó asszisztens", description: "Facebook leadek automatikus felhívása és időpontfoglalása.", icon: Facebook },
   { id: "automation", title: "AI automatizáció", description: "Folyamatok, értesítések és háttérfeladatok automatizálása.", icon: Workflow },
 ];
 
@@ -80,6 +81,28 @@ const categoryCopy: Record<PortalProjectCategory, {
     secondaryChoiceDescription: "A norpheus AI csapat kéri elő a megfelelő telefonszámot.",
     hint: "Az első verzió draft státuszban jön létre, később innen kötjük rá a tudásbázist és a telefonszámot.",
   },
+  meta_lead_caller: {
+    basicStepTitle: "Hívó asszisztens alapok",
+    basicStepDescription: "Név, hang és értékesítési stílus",
+    connectionStepTitle: "Telefon",
+    connectionStepDescription: "Kimenő hívások beállítása",
+    googleStepTitle: "Google Calendar",
+    googleStepDescription: "Időpontfoglalási hozzáférés",
+    reviewStepTitle: "Lead hívó indítás",
+    reviewStepDescription: "Ellenőrzés",
+    heading: "Meta lead hívó asszisztens alapadatai",
+    description: "Add meg a Facebook leadeket felhívó projekt és az érdeklődők számára hallható asszisztens nevét.",
+    projectPlaceholder: "Pl. Facebook érdeklődőket hívó asszisztens",
+    secondaryLabel: "Hívó asszisztens neve",
+    secondaryPlaceholder: "Pl. Lili, értékesítési asszisztens",
+    connectionHeading: "Kimenő hívások telefonszáma",
+    connectionDescription: "Válaszd ki, milyen telefonszámról hívja fel az asszisztens a Meta leadeket.",
+    primaryChoice: "Később kötöm össze",
+    primaryChoiceDescription: "A projekt létrejön, a kimenő telefonszám később állítható be.",
+    secondaryChoice: "Szám igénylése",
+    secondaryChoiceDescription: "A norpheus AI csapat kéri elő a kimenő hívásokhoz használt telefonszámot.",
+    hint: "Az első verzió draft státuszban jön létre; a Meta leadforrást, a hívási szabályokat és a Google Calendart később kapcsoljuk hozzá.",
+  },
   automation: {
     basicStepTitle: "Automatizálás alapok",
     basicStepDescription: "Név és cél",
@@ -116,15 +139,16 @@ export function ProjectOnboarding({ companyName, initialCategory = null }: { com
   const [handoffInstructions, setHandoffInstructions] = useState("");
   const [callInstructionsSource, setCallInstructionsSource] = useState<"text" | "file">("text");
   const [handoffInstructionsSource, setHandoffInstructionsSource] = useState<"text" | "file">("text");
-  const [phonePreference, setPhonePreference] = useState(initialCategory === "voice_agent" ? "21" : "later");
+  const [phonePreference, setPhonePreference] = useState(initialCategory === "voice_agent" || initialCategory === "meta_lead_caller" ? "21" : "later");
   const [googleAccountEmail, setGoogleAccountEmail] = useState("");
   const [googlePasswordShareUrl, setGooglePasswordShareUrl] = useState("");
   const [state, formAction, pending] = useActionState(createProject, initialState);
   const selectedCategory = category ?? "voice_agent";
+  const isPhoneAgent = selectedCategory === "voice_agent" || selectedCategory === "meta_lead_caller";
   const copy = categoryCopy[selectedCategory];
   const requiresSecondaryName = selectedCategory !== "automation";
   const ActiveCategoryIcon = categories.find((item) => item.id === selectedCategory)?.icon ?? Bot;
-  const ConnectionIcon = selectedCategory === "voice_agent" ? Phone : selectedCategory === "chatbot" ? MessageSquareText : Workflow;
+  const ConnectionIcon = isPhoneAgent ? Phone : selectedCategory === "chatbot" ? MessageSquareText : Workflow;
   const firstStep = isCategoryLocked ? 1 : 0;
   const basicStep = isCategoryLocked ? 2 : 1;
   const connectionStep = isCategoryLocked ? 3 : 2;
@@ -193,7 +217,7 @@ export function ProjectOnboarding({ companyName, initialCategory = null }: { com
                   return (
                     <button className={`category-option ${category === item.id ? "active" : ""}`} key={item.id} onClick={() => {
                       setCategory(item.id);
-                      setPhonePreference(item.id === "voice_agent" ? "21" : "later");
+                      setPhonePreference(item.id === "voice_agent" || item.id === "meta_lead_caller" ? "21" : "later");
                     }} type="button">
                       <span className="category-icon"><Icon size={18} /></span>
                       <strong>{item.title}</strong>
@@ -294,7 +318,7 @@ export function ProjectOnboarding({ companyName, initialCategory = null }: { com
         {category && (
           <section className="onboarding-card" hidden={currentStep !== connectionStep}>
             <div className="onboarding-card-heading"><ConnectionIcon size={19} /><div><h2>{copy.connectionHeading}</h2><p>{copy.connectionDescription}</p></div></div>
-            {selectedCategory === "voice_agent" ? (
+            {isPhoneAgent ? (
               <div className="phone-flow compact-phone-flow">
                 <div className="phone-selector">
                   <button className={`phone-selector-button ${phonePreference === "21" ? "active" : ""}`} onClick={() => setPhonePreference("21")} type="button">
@@ -392,7 +416,7 @@ export function ProjectOnboarding({ companyName, initialCategory = null }: { com
 }
 
 function formatConnectionChoice(category: PortalProjectCategory, preference: string, primaryChoice: string, secondaryChoice: string) {
-  if (category !== "voice_agent") return preference === "later" ? primaryChoice : secondaryChoice;
+  if (category !== "voice_agent" && category !== "meta_lead_caller") return preference === "later" ? primaryChoice : secondaryChoice;
   if (preference === "21") return "06 21-es szám";
   if (preference === "local_private") return "Saját körzetes szám - magánszemély";
   return "Saját körzetes szám - céges";

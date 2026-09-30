@@ -10,7 +10,7 @@ export default function NavLinks() {
   return (
     <nav className="nav" aria-label="Fő navigáció">
       <Link className={`nav-link ${pathname === "/portal" ? "active" : ""}`} href="/portal"><LayoutDashboard size={17} /><span>Áttekintés</span></Link>
-      <Link className={`nav-link ${pathname.startsWith("/portal/projects") || pathname.startsWith("/portal/agents") ? "active" : ""}`} href="/portal/projects"><Bot size={17} /><span>Voice agentek</span></Link>
+      <Link className={`nav-link ${pathname.startsWith("/portal/projects") || pathname.startsWith("/portal/agents") ? "active" : ""}`} href="/portal/projects"><Bot size={17} /><span>Telefonos asszisztensek</span></Link>
       <Link className={`nav-link ${pathname.startsWith("/portal/phone-numbers") ? "active" : ""}`} href="/portal/phone-numbers"><Phone size={17} /><span>Telefonszámok</span></Link>
       <Link className={`nav-link ${pathname.startsWith("/portal/support") ? "active" : ""}`} href="/portal/support"><LifeBuoy size={17} /><span>Támogatás</span></Link>
     </nav>

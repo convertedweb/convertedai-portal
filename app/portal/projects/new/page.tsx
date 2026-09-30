@@ -8,7 +8,7 @@ type PortalProjectCategory = Exclude<ProjectCategory, "ui_ux_design" | "website"
 
 function parseCategory(value: string | string[] | undefined): PortalProjectCategory | null {
   const category = Array.isArray(value) ? value[0] : value;
-  return category === "voice_agent" || category === "chatbot" || category === "automation" ? category : null;
+  return category === "voice_agent" || category === "meta_lead_caller" || category === "chatbot" || category === "automation" ? category : null;
 }
 
 export default async function NewProjectPage({ searchParams }: { searchParams: Promise<{ category?: string | string[] }> }) {
@@ -16,6 +16,8 @@ export default async function NewProjectPage({ searchParams }: { searchParams: P
   const initialCategory = parseCategory(params.category);
   const title = initialCategory === "voice_agent"
     ? "Új voice agent"
+    : initialCategory === "meta_lead_caller"
+      ? "Új Meta lead hívó asszisztens"
     : initialCategory === "chatbot"
       ? "Új chatbot"
       : initialCategory === "automation"

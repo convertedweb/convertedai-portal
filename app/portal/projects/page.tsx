@@ -4,20 +4,20 @@ import { categoryLabels, getProjects, statusLabels } from "@/lib/data";
 
 export default async function ProjectsPage() {
   const allProjects = await getProjects();
-  const projects = allProjects.filter((project) => project.category === "voice_agent");
+  const projects = allProjects.filter((project) => project.category === "voice_agent" || project.category === "meta_lead_caller");
   return (
     <section className="content">
       <div className="page-intro">
         <div>
-          <p className="eyebrow">Voice agentek</p>
-          <h1>Voice agentek</h1>
+          <p className="eyebrow">Telefonos asszisztensek</p>
+          <h1>Telefonos asszisztensek</h1>
           <p className="intro-copy">Tekintsd át a telefonos asszisztenseidet, és nyisd meg a hozzájuk tartozó dokumentumokat, státuszokat és aktivitást.</p>
         </div>
-        <Link className="button" href="/portal/projects/new?category=voice_agent"><Plus size={15} /> Új voice agent</Link>
+        <Link className="button" href="/portal/projects/new"><Plus size={15} /> Új projekt</Link>
       </div>
 
       <div className="projects-toolbar">
-        <div className="projects-count">Összes voice agent <strong>{projects.length}</strong></div>
+        <div className="projects-count">Összes telefonos asszisztens <strong>{projects.length}</strong></div>
         <div className="project-filters"><button className="filter-button active">Mind</button><button className="filter-button">Aktív</button><button className="filter-button">Beállítás alatt</button></div>
       </div>
 

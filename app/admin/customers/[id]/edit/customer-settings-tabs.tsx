@@ -286,9 +286,9 @@ function AdminCreateProjectForm({ customer }: { customer: AdminCustomer }) {
   const [isOpen, setIsOpen] = useState(false);
   const [category, setCategory] = useState("voice_agent");
   const [state, formAction, pending] = useActionState(createAdminProject, createProjectInitialState);
-  const isVoiceAgent = category === "voice_agent";
+  const isVoiceAgent = category === "voice_agent" || category === "meta_lead_caller";
   const isDeliveryProject = category === "ui_ux_design" || category === "website";
-  const needsAgentName = category === "voice_agent" || category === "chatbot";
+  const needsAgentName = isVoiceAgent || category === "chatbot";
 
   return (
     <div className="admin-create-project">
@@ -304,6 +304,7 @@ function AdminCreateProjectForm({ customer }: { customer: AdminCustomer }) {
             <label className="field"><span>Projekt neve</span><div className="prefixed-input"><span>{customer.companyName} -</span><input name="projectName" placeholder="Projekt neve" required /></div></label>
             <label className="field"><span>Kategória</span><select name="category" onChange={(event) => setCategory(event.target.value)} value={category}>
               <option value="voice_agent">{categoryLabels.voice_agent}</option>
+              <option value="meta_lead_caller">{categoryLabels.meta_lead_caller}</option>
               <option value="chatbot">{categoryLabels.chatbot}</option>
               <option value="automation">{categoryLabels.automation}</option>
               <option value="ui_ux_design">{categoryLabels.ui_ux_design}</option>

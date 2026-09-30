@@ -50,7 +50,7 @@ function parseMemberRole(value: FormDataEntryValue | null) {
 }
 
 function parseProjectCategory(value: FormDataEntryValue | null): ProjectCategory {
-  return value === "chatbot" || value === "automation" || value === "voice_agent" || value === "ui_ux_design" || value === "website" ? value : "voice_agent";
+  return value === "chatbot" || value === "automation" || value === "voice_agent" || value === "meta_lead_caller" || value === "ui_ux_design" || value === "website" ? value : "voice_agent";
 }
 
 function parseProjectStatus(value: FormDataEntryValue | null): ProjectStatus {
@@ -293,12 +293,13 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
   const companyName = requiredText(formData.get("companyName"));
   const projectName = requiredText(formData.get("projectName"));
   const category = parseProjectCategory(formData.get("category"));
+  const isPhoneAgent = category === "voice_agent" || category === "meta_lead_caller";
   const isDeliveryProject = category === "ui_ux_design" || category === "website";
   const status = parseProjectStatus(formData.get("status"));
   const agentName = requiredText(formData.get("agentName"));
-  const phoneRequestType = category === "voice_agent" ? parsePhoneRequestType(formData.get("phoneRequestType")) : null;
+  const phoneRequestType = isPhoneAgent ? parsePhoneRequestType(formData.get("phoneRequestType")) : null;
   const phoneNumber = requiredText(formData.get("phoneNumber")) || null;
-  const telnyxStatus = category === "voice_agent" ? parseTelnyxStatus(formData.get("telnyxStatus")) : "pending";
+  const telnyxStatus = isPhoneAgent ? parseTelnyxStatus(formData.get("telnyxStatus")) : "pending";
   const googleAccountEmail = requiredText(formData.get("googleAccountEmail")) || null;
   const googlePasswordShareUrl = requiredText(formData.get("googlePasswordShareUrl")) || null;
   const googleAccessStatus = isDeliveryProject ? "not_provided" : parseGoogleAccessStatus(formData.get("googleAccessStatus"));
@@ -309,8 +310,8 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
     return { error: "Az ügyfél, cég és projekt neve kötelező." };
   }
 
-  if ((category === "voice_agent" || category === "chatbot") && !agentName) {
-    return { error: "Voice agent vagy chatbot projektnél az agent neve kötelező." };
+  if ((isPhoneAgent || category === "chatbot") && !agentName) {
+    return { error: "Asszisztens projektnél az agent neve kötelező." };
   }
 
   const adminCheck = await assertProjectAdmin();
@@ -337,7 +338,7 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
     .insert({
       organization_id: customerId,
       name: formatProjectName(companyName, projectName),
-      agent_display_name: category === "voice_agent" || category === "chatbot" ? agentName : null,
+      agent_display_name: isPhoneAgent || category === "chatbot" ? agentName : null,
       category,
       project_type: category === "website" ? "website" : category === "ui_ux_design" ? "other" : category === "automation" ? "automation" : "voice_agent",
       status,
