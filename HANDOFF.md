@@ -4,6 +4,15 @@
 
 A superadmin számára biztonságos, időkorlátos admin- és ügyfélfiók-megszemélyesítés előkészítése. A megvalósítás helyben elkészült és ellenőrzött, de nincs pusholva, deployolva, és a `20260927193155_add_impersonation_sessions.sql` migráció a remote migration history szerint már alkalmazva van (2026-09-29 ellenőrzés), de kézi szerepkörös teszt még nem történt.
 
+## Átadás Codexnek (2026-09-30)
+
+- Git: `master`, a legutóbbi három commit (`2fdb24c`, `561a533`, `34787a0`) helyben van, **nincs pusholva és nincs deployolva**. Deploy előtt kötelező rákérdezni a helyi tesztadatok sorsára (lásd AGENTS.md).
+- Nem commitolt, szándékosan kihagyott fájlok: `next-env.d.ts` (a dev szerver generálta, ne szerkeszd kézzel), `.claude/launch.json` (helyi preview-konfiguráció).
+- A helyi dev szerver a 3000-es porton fut; ha a CSS nem töltődik be, állítsd le, töröld a `.next-dev` mappát és indítsd újra.
+- Az új `start_date` migráció a kapcsolt (valószínűleg éles) Supabase projekten már alkalmazva van; a helyi és az éles app ugyanazt az adatbázist használja.
+- Még nem volt kézi, bejelentkezett böngészős teszt: új feladat létrehozása felelőssel/státusszal/kezdő dátummal, szerkesztés, lista nézet dátumtartomány, megszemélyesítés.
+- Javasolt következő lépések: kézi teszt fent; ESLint bekötése (új devDependency, jóváhagyás kell); becsült idő, címkék, checklist mezők; security advisor figyelmeztetések.
+
 ## Feladatűrlap-bővítések (2026-09-29)
 
 - Új feladat űrlap: **Felelős** (alapértelmezés a bejelentkezett admin), **Kezdeti státusz** (alapértelmezés `backlog`) és **Kezdő dátum** mező. A `createTask` „Kész” kezdeti státusznál `completed_at`-et is állít.
