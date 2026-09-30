@@ -2,7 +2,14 @@
 
 ## Aktuális cél
 
-A superadmin számára biztonságos, időkorlátos admin- és ügyfélfiók-megszemélyesítés előkészítése. A megvalósítás helyben elkészült és ellenőrzött, de nincs pusholva, deployolva, és a `20260927193155_add_impersonation_sessions.sql` migráció nincs alkalmazva külső Supabase projekten.
+A superadmin számára biztonságos, időkorlátos admin- és ügyfélfiók-megszemélyesítés előkészítése. A megvalósítás helyben elkészült és ellenőrzött, de nincs pusholva, deployolva, és a `20260927193155_add_impersonation_sessions.sql` migráció a remote migration history szerint már alkalmazva van (2026-09-29 ellenőrzés), de kézi szerepkörös teszt még nem történt.
+
+## Feladatűrlap-bővítések (2026-09-29)
+
+- Új feladat űrlap: **Felelős** (alapértelmezés a bejelentkezett admin), **Kezdeti státusz** (alapértelmezés `backlog`) és **Kezdő dátum** mező. A `createTask` „Kész” kezdeti státusznál `completed_at`-et is állít.
+- Kezdő dátum: új `tasks.start_date date` oszlop (`20260929120000_add_task_start_date.sql`), a szerkesztőoldalon és a lista nézetben is megjelenik; a szerver ellenőrzi, hogy nem későbbi a határidőnél; a változás bekerül az aktivitási naplóba.
+- A migrációt a felhasználó jóváhagyásával célzottan futtattam a kapcsolt Supabase projekten (`supabase db query --linked -f`), majd `migration repair --status applied 20260929120000`. Az oszlop létezik (date, nullable).
+- Tervezett további mezők (még nincsenek): becsült idő, címkék, checklist, kategória, ismétlődés, csatolmány, függőség.
 
 ## Legutóbbi fejlesztés (2026-09-29)
 
@@ -89,7 +96,7 @@ A superadmin számára biztonságos, időkorlátos admin- és ügyfélfiók-megs
 4. Ellenőrizd az admin naplóoldalon a létrehozott, felhasznált és lejárt sessionök megjelenését; szükség esetén dönts a régi sessionök későbbi takarításáról.
 5. Valódi superadmin, normál admin és ügyfél fiókkal teszteld a pénzügyi képernyőket és a közvetlen Supabase Data API-t. A normál admin nem kaphat `superadmin_only` szervezethez tartozó számla-, díjterv- vagy bevételsort, és nem írhat ilyet.
 6. Vizsgáld meg a Supabase security advisor három figyelmeztetését: `admin_customer_members` SECURITY DEFINER függvény [anon](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) és [authenticated](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable) szerepkörből hívható; a [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) ki van kapcsolva. A jogosultságok változtatása előtt ellenőrizd a függvény tényleges használatát.
-7. Állíts be nem interaktív ESLint konfigurációt és Node 22.6+ vagy külön TypeScript tesztfuttatót; utána futtasd a teljes tesztcsomagot.
+7. Állíts be nem interaktív ESLint konfigurációt (ehhez `eslint` + `eslint-config-next` devDependency kell — döntés a felhasználóra vár). A tesztfuttató kész: `npm test` (lásd alább).
 
 ## Fontos döntések
 
@@ -103,6 +110,7 @@ A superadmin számára biztonságos, időkorlátos admin- és ügyfélfiók-megs
 
 ## Ellenőrzés
 
+- 2026-09-29 (később): új `npm test` script (`scripts/run-tests.mjs`) tsc-vel fordítja a teszteket és `node --test`-tel futtatja; Node 20-on is működik, 2/2 teszt sikeres.
 - 2026-09-29: `npm run build` sikeres, az új `/auth/impersonate/[id]` route-tal együtt 27 oldal generálva.
 - 2026-09-29: `npx tsc --noEmit --incremental false` sikeres.
 - 2026-09-29: `git diff --check` sikeres.

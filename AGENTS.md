@@ -61,7 +61,7 @@ node --test --experimental-strip-types tests/*.test.ts  # Node 22.6+
 
 - A fejlesztői szerver a `http://localhost:3000` címen fut.
 - Minden kódmódosítás után legalább az érintett tesztet és a TypeScript/build ellenőrzést futtasd.
-- Jelenleg nincs `test` script a `package.json`-ban; a fenti explicit Node paranccsal Node 22.6 vagy újabb környezetben futnak a tesztek. A repo jelenlegi Node 20 környezetében külön TypeScript futtató beállítása szükséges.
+- Tesztek futtatása: `npm test` (Node 20-on is működik; tsc-vel fordít, majd `node --test`). A fenti explicit Node parancs csak Node 22.6+ alatt fut.
 - Ha `npm run lint` a Next.js verzió miatt magának a parancsnak a hibájával áll le, ezt ne tekintsd tiszta lint eredménynek: dokumentáld a `HANDOFF.md`-ben, és külön futtasd a buildet.
 - Adatbázis-változásnál ellenőrizd a migráció SQL-jét és lehetőség szerint teszt Supabase projekten futtasd le. A migráció futtatása külső állapotváltozás; csak a kijelölt környezetben végezd.
 
@@ -71,6 +71,12 @@ node --test --experimental-strip-types tests/*.test.ts  # Node 22.6+
 - Egy commit csak összetartozó változásokat tartalmazzon; ne stage-elj automatikusan minden fájlt.
 - Ne commitold a generált `.next/`, `.next-dev/`, `tsconfig.tsbuildinfo`, `supabase/.temp/` vagy lokális környezeti fájlokat.
 - A migrációk sorrendje számít. Már alkalmazott migrációt ne nevezz át, ne törölj és ne írj visszamenőleg át.
+
+## Deploy előtti adatellenőrzés
+
+- Minden éles deploy előtt kérdezd meg a felhasználót: a helyi környezetben létrehozott új ügyfeleket, projekteket és egyéb adatokat át akarja-e vinni az éles Supabase projektbe, vagy ezek csak tesztadatok. A válasz megérkezéséig ne indíts adatmásolást, seedet vagy éles adatbázis-módosítást.
+- Alapértelmezésben csak a kódot és a jóváhagyott sémamigrációkat telepítsd; helyi adatrekordokat ne másolj automatikusan. Ha az adatátvitelre igen a válasz, előbb egyeztesd a konkrét rekordokat, a célkörnyezetet, a duplikációkezelést és a mentési/visszaállítási tervet.
+- Deploy előtt ellenőrizd, hogy a helyi alkalmazás és az éles portál ugyanarra a Supabase projektre mutat-e. Ha igen, mondd el egyértelműen, hogy a helyben felvitt adatok már az éles adatbázisban vannak, így nincs külön feltöltési lépés; tesztadatokat csak kifejezett jóváhagyással tisztíts.
 
 ## Tilos
 
