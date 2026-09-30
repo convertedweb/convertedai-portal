@@ -21,6 +21,13 @@ function parseStatus(value: string): TaskStatus | null {
   return value === "archived" || taskStatuses.some((status) => status === value) ? value as TaskStatus : null;
 }
 
+function parseDateRange(startDate: string, dueDate: string): string | null {
+  if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return "Érvénytelen kezdő dátum.";
+  if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return "Érvénytelen határidő.";
+  if (startDate && dueDate && startDate > dueDate) return "A kezdő dátum nem lehet a határidő után.";
+  return null;
+}
+
 function parseVisibility(value: string): TaskVisibility | null {
   return value === "internal" || value === "client_visible" || value === "superadmin_only" ? value : null;
 }
@@ -32,6 +39,7 @@ export async function createTask(_previousState: TaskActionState, formData: Form
   const priority = parsePriority(text(formData.get("priority")));
   const visibility = parseVisibility(text(formData.get("visibility")));
   const dueDate = text(formData.get("dueDate"));
+  const startDate = text(formData.get("startDate"));
   const assigneeUserId = text(formData.get("assigneeUserId")) || null;
   const notificationKey = text(formData.get("notificationKey")) || null;
   const initialStatusValue = text(formData.get("initialStatus")) || "backlog";
@@ -41,6 +49,8 @@ export async function createTask(_previousState: TaskActionState, formData: Form
   if (title.length > 300) return { error: "A feladat címe legfeljebb 300 karakter lehet." };
   if (!visibility) return { error: "Érvénytelen láthatóság." };
   if (!initialStatus) return { error: "Érvénytelen kezdeti státusz." };
+  const dateError = parseDateRange(startDate, dueDate);
+  if (dateError) return { error: dateError };
 
   const access = await getCurrentAdminAccess();
   if (!access.user || !access.role) return { error: "A művelethez admin jogosultság szükséges." };
@@ -66,12 +76,14 @@ export async function createTask(_previousState: TaskActionState, formData: Form
 
   const { data: task, error } = await adminSupabase.from("tasks").insert({
     assignee_user_id: assigneeUserId,
+    completed_at: initialStatus === "done" ? new Date().toISOString() : null,
     created_by: access.user.id,
     description,
     due_at: dueDate ? new Date(`${dueDate}T23:59:59`).toISOString() : null,
     organization_id: project.organization_id,
     priority,
     project_id: project.id,
+    start_date: startDate || null,
     status: initialStatus,
     title,
     visibility,
@@ -92,6 +104,7 @@ export async function createTask(_previousState: TaskActionState, formData: Form
       notificationKey,
       priority,
       source: notificationKey ? "notification" : "manual",
+      startDate: startDate || null,
       status: initialStatus,
       taskId: task.id,
       visibility,
@@ -187,12 +200,14 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
   const priority = parsePriority(text(formData.get("priority")));
   const visibility = parseVisibility(text(formData.get("visibility")));
   const dueDate = text(formData.get("dueDate"));
+  const startDate = text(formData.get("startDate"));
 
   if (!taskId || !projectId || !title || !status || !priority) return { error: "A projekt, a cím, a státusz és a prioritás kötelező." };
   if (title.length > 300) return { error: "A feladat címe legfeljebb 300 karakter lehet." };
   if (description.length > 10000) return { error: "A leírás legfeljebb 10 000 karakter lehet." };
   if (!visibility) return { error: "Érvénytelen láthatóság." };
-  if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return { error: "Érvénytelen határidő." };
+  const dateError = parseDateRange(startDate, dueDate);
+  if (dateError) return { error: dateError };
 
   const access = await getCurrentAdminAccess();
   if (!access.user || !access.role) return { error: "A művelethez admin jogosultság szükséges." };
@@ -201,7 +216,7 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
   if (!adminSupabase) return { error: "Hiányzik a Supabase szerveroldali kulcs." };
 
   const [{ data: currentTask }, { data: project }] = await Promise.all([
-    adminSupabase.from("tasks").select("id, organization_id, project_id, source_ticket_id, title, description, status, priority, visibility, due_at").eq("id", taskId).is("deleted_at", null).maybeSingle(),
+    adminSupabase.from("tasks").select("id, organization_id, project_id, source_ticket_id, title, description, status, priority, visibility, due_at, start_date").eq("id", taskId).is("deleted_at", null).maybeSingle(),
     adminSupabase.from("projects").select("id, organization_id, name").eq("id", projectId).is("deleted_at", null).maybeSingle(),
   ]);
   if (!currentTask) return { error: "A feladat nem található." };
@@ -219,6 +234,7 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
     organization_id: project.organization_id,
     priority,
     project_id: project.id,
+    start_date: startDate || null,
     status,
     title,
     visibility,
@@ -237,6 +253,7 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
   if (currentTask.priority !== priority) changes.priority = { from: currentTask.priority, to: priority };
   if (currentTask.visibility !== visibility) changes.visibility = { from: currentTask.visibility, to: visibility };
   if (currentTask.due_at !== nextDueAt) changes.dueAt = { from: currentTask.due_at, to: nextDueAt };
+  if ((currentTask.start_date ?? null) !== (startDate || null)) changes.startDate = { from: currentTask.start_date ?? null, to: startDate || null };
 
   await logAdminActivity({
     actorUserId: access.user.id,

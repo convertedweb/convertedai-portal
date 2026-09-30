@@ -35,6 +35,7 @@ type TaskRow = {
   priority: TaskPriority;
   visibility: "internal" | "client_visible" | "superadmin_only";
   due_at: string | null;
+  start_date: string | null;
   created_at: string;
 };
 
@@ -213,7 +214,7 @@ export async function getProjectManagementData() {
   const [tasksResult, projectsResult, organizationsResult] = await Promise.all([
     adminSupabase
       .from("tasks")
-      .select("id, project_id, source_ticket_id, assignee_user_id, created_by, title, description, status, priority, visibility, due_at, created_at")
+      .select("id, project_id, source_ticket_id, assignee_user_id, created_by, title, description, status, priority, visibility, due_at, start_date, created_at")
       .is("deleted_at", null)
       .neq("status", "archived")
       .order("sort_order", { ascending: true })
