@@ -9,6 +9,7 @@ import { getTodayDateInputValue } from "@/lib/date-input";
 import { categoryLabels, googleAccessStatusLabels, phoneRequestLabels, statusLabels, telnyxStatusLabels } from "@/lib/project-types";
 import { createAdminProject, createInvoice, updateInvoice, type CreateAdminProjectState, type CreateInvoiceState } from "./actions";
 import { EditCustomerForm } from "./edit-customer-form";
+import { DeleteCustomerMemberButton, EditCustomerMemberEmail } from "./edit-customer-member-email";
 import { InviteCustomerMemberForm } from "./invite-customer-member-form";
 
 type SettingsTab = "basics" | "users" | "projects" | "invoices";
@@ -131,6 +132,24 @@ export function CustomerSettingsTabs({
                   </div>
                   <span className="access-status">{memberRoleLabels[member.role]}</span>
                   <span className="detail-value">{member.createdAt}</span>
+                  <div className="admin-member-actions">
+                    {isSuperadmin && (
+                      <>
+                        <EditCustomerMemberEmail
+                          customerId={customer.id}
+                          email={member.email}
+                          name={member.name}
+                          userId={member.userId}
+                        />
+                        <DeleteCustomerMemberButton
+                          customerId={customer.id}
+                          email={member.email}
+                          name={member.name}
+                          userId={member.userId}
+                        />
+                      </>
+                    )}
+                  </div>
                 </div>
               )) : (
                 <div className="empty-state">Ennél az ügyfélnél még nincs portál felhasználó.</div>

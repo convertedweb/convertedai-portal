@@ -201,7 +201,7 @@ export default async function AdminUsersPage() {
             <span className="detail-value">{user.createdAt}</span>
             <div className="user-row-actions">
               <ImpersonationButton targetEmail={user.email} targetName={user.customerName} targetUserId={user.userId} />
-              <Link className="icon-button" aria-label={`${user.customerName} szerkesztése`} href={`/admin/customers/${user.customerId}/edit`} title="Szerkesztés"><Pencil size={16} /></Link>
+              <Link className="icon-button" aria-label={`${user.customerName} szerkesztése`} href={`/admin/customers/${user.customerId}/edit?tab=users`} title="Szerkesztés"><Pencil size={16} /></Link>
             </div>
           </div>
         )) : (

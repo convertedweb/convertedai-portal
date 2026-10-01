@@ -18,6 +18,15 @@ export type InviteCustomerMemberState = {
   success?: string;
 };
 
+export type UpdateCustomerMemberEmailState = {
+  error?: string;
+  success?: string;
+};
+
+export type DeleteCustomerMemberState = {
+  error?: string;
+};
+
 export type CreateAdminProjectState = {
   error?: string;
 };
@@ -286,6 +295,229 @@ export async function inviteCustomerMember(_previousState: InviteCustomerMemberS
       ? "Meghívó elküldve, a felhasználó hozzá lett rendelve az ügyfélhez."
       : "A felhasználó már létezett, hozzá lett rendelve az ügyfélhez.",
   };
+}
+
+export async function updateCustomerMemberEmail(
+  _previousState: UpdateCustomerMemberEmailState,
+  formData: FormData,
+): Promise<UpdateCustomerMemberEmailState> {
+  const customerId = requiredText(formData.get("customerId"));
+  const userId = requiredText(formData.get("userId"));
+  const fullName = requiredText(formData.get("fullName"));
+  const email = requiredText(formData.get("email")).toLowerCase();
+
+  if (!customerId || !userId || !fullName || !email) {
+    return { error: "Az ügyfél, a felhasználó neve és az e-mail-cím kötelező." };
+  }
+
+  const access = await getCurrentAdminAccess();
+  if (!access.user) return { error: "A módosításhoz újra be kell jelentkezned." };
+  if (access.role !== "superadmin") return { error: "Portálfelhasználót csak superadmin módosíthat." };
+
+  const adminSupabase = createAdminClient();
+  if (!adminSupabase) return { error: "Hiányzik a Supabase titkos szerveroldali kulcs." };
+
+  const [membershipResult, organizationResult, adminRoleResult, superAdminResult, userResult] = await Promise.all([
+    adminSupabase
+      .from("org_members")
+      .select("id")
+      .eq("organization_id", customerId)
+      .eq("user_id", userId)
+      .limit(1),
+    adminSupabase
+      .from("organizations")
+      .select("id")
+      .eq("id", customerId)
+      .is("deleted_at", null)
+      .limit(1),
+    adminSupabase.from("admin_roles").select("id").eq("user_id", userId).limit(1),
+    adminSupabase.from("super_admins").select("user_id").eq("user_id", userId).limit(1),
+    adminSupabase.auth.admin.getUserById(userId),
+  ]);
+
+  if (membershipResult.error || organizationResult.error || adminRoleResult.error || superAdminResult.error) {
+    console.error("Customer member email authorization check failed", {
+      membershipError: membershipResult.error,
+      organizationError: organizationResult.error,
+      adminRoleError: adminRoleResult.error,
+      superAdminError: superAdminResult.error,
+    });
+    return { error: "Nem sikerült ellenőrizni a portálfelhasználó jogosultságát. Próbáld újra később." };
+  }
+
+  if (!organizationResult.data?.length || !membershipResult.data?.length) {
+    return { error: "Ez a portálfelhasználó nem tartozik a kiválasztott ügyfélhez." };
+  }
+
+  if (adminRoleResult.data?.length || superAdminResult.data?.length) {
+    return { error: "Belső admin felhasználó e-mail-címe itt nem módosítható." };
+  }
+
+  const currentUser = userResult.data.user;
+  if (userResult.error || !currentUser) {
+    return { error: "A portálfelhasználó belépési fiókja nem található." };
+  }
+
+  const previousEmail = currentUser.email ?? null;
+  const previousName = typeof currentUser.user_metadata?.full_name === "string"
+    ? currentUser.user_metadata.full_name
+    : typeof currentUser.user_metadata?.name === "string"
+      ? currentUser.user_metadata.name
+      : "";
+  const emailChanged = previousEmail?.toLowerCase() !== email;
+  const nameChanged = previousName !== fullName;
+
+  if (emailChanged || nameChanged) {
+    const { error: updateError } = await adminSupabase.auth.admin.updateUserById(userId, {
+      ...(emailChanged ? { email, email_confirm: true } : {}),
+      user_metadata: {
+        ...currentUser.user_metadata,
+        full_name: fullName,
+        name: fullName,
+      },
+    });
+
+    if (updateError) {
+      console.error("Customer member email update failed", updateError);
+      return {
+        error: emailChanged
+          ? "Nem sikerült módosítani a felhasználót. Ellenőrizd, hogy az e-mail-cím nincs-e már használatban."
+          : "Nem sikerült módosítani a portálfelhasználó nevét.",
+      };
+    }
+  }
+
+  if (!emailChanged && !nameChanged) {
+    return { success: "A felhasználó adatai nem változtak." };
+  }
+
+  if (emailChanged) {
+    const { error: invitationError } = await adminSupabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${getSiteUrl()}/auth/confirm`,
+        shouldCreateUser: false,
+      },
+    });
+
+    if (invitationError) {
+      console.error("Customer member invitation send failed", invitationError);
+      return { error: "A felhasználó adatai módosultak, de a meghívót nem sikerült elküldeni. Próbáld újra néhány perc múlva." };
+    }
+  }
+
+  await logAdminActivity({
+    actorUserId: access.user.id,
+    eventType: "admin_customer_member_updated",
+    organizationId: customerId,
+    title: emailChanged ? "Portálfelhasználó e-mail-címe módosítva" : "Portálfelhasználó neve módosítva",
+    description: email,
+    metadata: { previousEmail, previousName, email, fullName, emailChanged, nameChanged, invitationSent: emailChanged, userId },
+  });
+
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/customers/${customerId}/edit`);
+
+  return {
+    success: emailChanged
+      ? "A felhasználó adatai módosítva, a meghívót elküldtük az új e-mail-címre."
+      : "A portálfelhasználó neve módosítva.",
+  };
+}
+
+export async function deleteCustomerMember(
+  _previousState: DeleteCustomerMemberState,
+  formData: FormData,
+): Promise<DeleteCustomerMemberState> {
+  const customerId = requiredText(formData.get("customerId"));
+  const userId = requiredText(formData.get("userId"));
+
+  if (!customerId || !userId) {
+    return { error: "Hiányzik az ügyfél vagy a felhasználó azonosítója." };
+  }
+
+  const access = await getCurrentAdminAccess();
+  if (!access.user) return { error: "A törléshez újra be kell jelentkezned." };
+  if (access.role !== "superadmin") return { error: "Portálfelhasználót csak superadmin törölhet." };
+  if (access.user.id === userId) return { error: "A saját felhasználói fiókodat itt nem törölheted." };
+
+  const adminSupabase = createAdminClient();
+  if (!adminSupabase) return { error: "Hiányzik a Supabase titkos szerveroldali kulcs." };
+
+  const [membershipsResult, organizationResult, adminRoleResult, superAdminResult, userResult] = await Promise.all([
+    adminSupabase
+      .from("org_members")
+      .select("organization_id")
+      .eq("user_id", userId),
+    adminSupabase
+      .from("organizations")
+      .select("id")
+      .eq("id", customerId)
+      .is("deleted_at", null)
+      .limit(1),
+    adminSupabase.from("admin_roles").select("id").eq("user_id", userId).limit(1),
+    adminSupabase.from("super_admins").select("user_id").eq("user_id", userId).limit(1),
+    adminSupabase.auth.admin.getUserById(userId),
+  ]);
+
+  if (membershipsResult.error || organizationResult.error || adminRoleResult.error || superAdminResult.error) {
+    console.error("Customer member delete authorization check failed", {
+      membershipsError: membershipsResult.error,
+      organizationError: organizationResult.error,
+      adminRoleError: adminRoleResult.error,
+      superAdminError: superAdminResult.error,
+    });
+    return { error: "Nem sikerült ellenőrizni a portálfelhasználó jogosultságát. Próbáld újra később." };
+  }
+
+  const memberships = membershipsResult.data ?? [];
+  const belongsToCustomer = memberships.some((membership) => membership.organization_id === customerId);
+
+  if (!organizationResult.data?.length || !belongsToCustomer) {
+    return { error: "Ez a portálfelhasználó nem tartozik a kiválasztott ügyfélhez." };
+  }
+
+  if (adminRoleResult.data?.length || superAdminResult.data?.length) {
+    return { error: "Belső admin felhasználó ezen a felületen nem törölhető." };
+  }
+
+  const currentUser = userResult.data.user;
+  if (userResult.error || !currentUser) {
+    return { error: "A portálfelhasználó belépési fiókja nem található." };
+  }
+
+  const email = currentUser.email ?? "Ismeretlen e-mail-cím";
+  const fullName = typeof currentUser.user_metadata?.full_name === "string"
+    ? currentUser.user_metadata.full_name
+    : typeof currentUser.user_metadata?.name === "string"
+      ? currentUser.user_metadata.name
+      : email;
+
+  const { error: deleteError } = await adminSupabase.auth.admin.deleteUser(userId);
+
+  if (deleteError) {
+    console.error("Customer member auth user delete failed", deleteError);
+    return { error: "Nem sikerült törölni a portálfelhasználót. Ha a felhasználó fájlokat birtokol, előbb azok tulajdonjogát kell rendezni." };
+  }
+
+  await logAdminActivity({
+    actorUserId: access.user.id,
+    eventType: "admin_customer_member_deleted",
+    organizationId: customerId,
+    title: "Portálfelhasználó törölve",
+    description: email,
+    metadata: {
+      userId,
+      email,
+      fullName,
+      organizationIds: memberships.map((membership) => membership.organization_id),
+    },
+  });
+
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/customers/${customerId}/edit`);
+
+  return {};
 }
 
 export async function createAdminProject(_previousState: CreateAdminProjectState, formData: FormData) {

@@ -90,7 +90,7 @@ export async function replySupportTicketAsAdmin(_previousState: ReplySupportTick
 
   const { data: ticket, error: ticketError } = await adminSupabase
     .from("support_tickets")
-    .select("id, organization_id, project_id, subject, status, priority, topic")
+    .select("id, organization_id, project_id, created_by, subject, status, priority, topic")
     .eq("id", ticketId)
     .is("deleted_at", null)
     .single();
@@ -142,6 +142,7 @@ export async function replySupportTicketAsAdmin(_previousState: ReplySupportTick
     action: "admin_replied",
     adminSupabase,
     customerEmail: null,
+    customerUserId: ticket.created_by,
     message,
     organizationId: ticket.organization_id,
     priority: ticket.priority,

@@ -57,7 +57,7 @@ export default async function AdminCustomerEditPage({ params, searchParams }: { 
         canEditCustomer={canEditCustomers(adminRole, adminPermissions)}
         canInviteCustomerUsers={canInviteCustomerUsers(adminRole, adminPermissions)}
         canManageProjects={canManageProjects}
-        initialTab={tab === "invoices" ? "invoices" : undefined}
+        initialTab={tab === "users" || tab === "projects" || tab === "invoices" ? tab : undefined}
         isSuperadmin={adminRole === "superadmin"}
         customer={customer}
       />

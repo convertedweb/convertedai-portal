@@ -5,6 +5,7 @@ import { logAdminActivity } from "@/lib/activity-log";
 import { getCurrentAdminAccess } from "@/lib/admin-permissions";
 import { taskStatuses, type TaskPriority, type TaskStatus } from "@/lib/project-management";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyTaskCreated } from "@/lib/task-notifications";
 
 export type TaskActionState = { error?: string; success?: string };
 type TaskVisibility = "internal" | "client_visible" | "superadmin_only";
@@ -112,6 +113,25 @@ export async function createTask(_previousState: TaskActionState, formData: Form
     organizationId: project.organization_id,
     projectId: project.id,
     title: "Feladat létrehozva",
+  });
+  const { data: organization } = await adminSupabase.from("organizations").select("name, company_name").eq("id", project.organization_id).maybeSingle();
+  await notifyTaskCreated({
+    actor: {
+      email: access.user.email,
+      id: access.user.id,
+      name: (access.user.user_metadata?.full_name as string | undefined) ?? (access.user.user_metadata?.name as string | undefined) ?? null,
+      role: access.role,
+    },
+    adminSupabase,
+    assigneeUserId,
+    customerName: organization?.company_name ?? organization?.name ?? null,
+    description,
+    dueDate: dueDate || null,
+    priority,
+    projectName: project.name,
+    status: initialStatus,
+    taskId: task.id,
+    title,
   });
   revalidatePath("/admin/tasks");
   revalidatePath("/admin/notifications");
@@ -287,8 +307,11 @@ export async function createTaskFromTicket(_previousState: TaskActionState, form
   if (!ticket) return { error: "A ticket nem található." };
   if (!ticket.project_id) return { error: "A tickethez előbb projektet kell rendelni." };
 
-  const { data: firstMessage } = await adminSupabase.from("support_ticket_messages")
-    .select("message").eq("ticket_id", ticket.id).is("deleted_at", null).order("created_at", { ascending: true }).limit(1).maybeSingle();
+  const [{ data: firstMessage }, { data: project }, { data: organization }] = await Promise.all([
+    adminSupabase.from("support_ticket_messages").select("message").eq("ticket_id", ticket.id).is("deleted_at", null).order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    adminSupabase.from("projects").select("name").eq("id", ticket.project_id).maybeSingle(),
+    adminSupabase.from("organizations").select("name, company_name").eq("id", ticket.organization_id).maybeSingle(),
+  ]);
 
   const { data: task, error } = await adminSupabase.from("tasks").insert({
     created_by: access.user.id,
@@ -297,6 +320,7 @@ export async function createTaskFromTicket(_previousState: TaskActionState, form
     priority: ticket.priority,
     project_id: ticket.project_id,
     source_ticket_id: ticket.id,
+    status: "todo",
     title: ticket.subject,
     visibility: "client_visible",
   }).select("id").single();
@@ -310,10 +334,26 @@ export async function createTaskFromTicket(_previousState: TaskActionState, form
     actorUserId: access.user.id,
     description: ticket.subject,
     eventType: "support_ticket_converted_to_task",
-    metadata: { source: "ticket", status: "backlog", taskId: task.id, ticketId: ticket.id },
+    metadata: { source: "ticket", status: "todo", taskId: task.id, ticketId: ticket.id },
     organizationId: ticket.organization_id,
     projectId: ticket.project_id,
     title: "Ticketből feladat készült",
+  });
+  await notifyTaskCreated({
+    actor: {
+      email: access.user.email,
+      id: access.user.id,
+      name: (access.user.user_metadata?.full_name as string | undefined) ?? (access.user.user_metadata?.name as string | undefined) ?? null,
+      role: access.role,
+    },
+    adminSupabase,
+    customerName: organization?.company_name ?? organization?.name ?? null,
+    description: firstMessage?.message ?? "",
+    priority: ticket.priority,
+    projectName: project?.name ?? "Ismeretlen projekt",
+    status: "backlog",
+    taskId: task.id,
+    title: ticket.subject,
   });
   revalidatePath("/admin/messages");
   revalidatePath("/admin/tasks");
