@@ -1,9 +1,8 @@
-import { Bell, LogOut, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import AdminNavLinks from "@/app/admin/admin-nav-links";
+import { DashboardHeader } from "@/app/dashboard-header";
 import { ImpersonationBanner } from "@/app/impersonation-banner";
-import { ThemeToggle } from "@/app/theme-toggle";
 import { getAdminProjects } from "@/lib/admin-data";
 import { getAdminSupportAlertCount } from "@/lib/support";
 import { getAdminTasks } from "@/lib/tasks";
@@ -22,25 +21,15 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
 
   return (
     <div className="app-shell admin-shell">
-      <aside className="icon-rail" aria-label="Admin gyors műveletek">
-        <div className="rail-logo"><Sparkles size={18} /></div>
-        <div className="rail-bottom">
-          <Link className="rail-button rail-notifications" aria-label={`Értesítések: ${notificationCount} db`} title={`${notificationCount} értesítés`} href="/admin/notifications">
-            <Bell size={18} />
-            {notificationCount > 0 && <span className="rail-badge">{notificationCount > 9 ? "9+" : notificationCount}</span>}
-          </Link>
-          <ThemeToggle />
-          <a className="rail-button" aria-label="Kijelentkezés" title="Kijelentkezés" href="/auth/signout?next=/admin"><LogOut size={18} /></a>
-        </div>
-      </aside>
       <aside className="sidebar">
-        <div className="brand"><div className="brand-name">Ügyfél Portál Admin</div></div>
+        <div className="brand"><div className="brand-mark"><Sparkles size={18} /></div><div className="brand-name">Ügyfél Portál Admin</div></div>
         <AdminNavLinks adminPermissions={adminPermissions} canManagePermissions={adminRole === "superadmin"} />
         <div className="sidebar-bottom">
           <div className="user-row"><div className="avatar">{initials}</div><div className="user-copy"><div className="user-name">{userName}</div><div className="user-email">{userEmail ?? "admin felület"}</div></div></div>
         </div>
       </aside>
       <main className="main">
+        <DashboardHeader label="Admin felület" notificationCount={notificationCount} notificationHref="/admin/notifications" signOutNext="/admin" />
         {impersonation && <ImpersonationBanner actorEmail={impersonation.actorEmail} actorName={impersonation.actorName} />}
         {children}
       </main>

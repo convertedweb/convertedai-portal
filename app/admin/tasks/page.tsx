@@ -1,4 +1,4 @@
-import { CalendarDays, CirclePause, Columns3, ExternalLink, Filter, Flag, List, ListTodo, LockKeyhole, Search, ShieldCheck, UserRoundCheck, Users, X } from "lucide-react";
+import { CalendarDays, ChevronDown, CirclePause, Columns3, ExternalLink, Filter, Flag, List, ListTodo, LockKeyhole, Search, ShieldCheck, UserRoundCheck, Users, X } from "lucide-react";
 import Link from "next/link";
 import { getAdminRoleLabel } from "@/lib/admin-permissions";
 import { getAssignableAdminUsers, getProjectManagementData, taskPriorityLabels, taskStatuses, taskStatusLabels, type TaskPriority, type TaskStatus } from "@/lib/project-management";
@@ -166,8 +166,11 @@ export default async function AdminTasksPage({ searchParams }: { searchParams: P
             {taskStatuses.map((sectionStatus) => {
               const sectionTasks = filteredTasks.filter((task) => task.status === sectionStatus);
               if (!sectionTasks.length) return null;
-              return <section className="pm-task-list-section" key={sectionStatus}>
-                <header className={`pm-task-list-section-heading ${sectionStatus}`}><div><i /><h2>{taskStatusLabels[sectionStatus]}</h2></div><strong>{sectionTasks.length}</strong></header>
+              return <details className="pm-task-list-section" key={sectionStatus} open>
+                <summary className={`pm-task-list-section-heading ${sectionStatus}`}>
+                  <div><i /><h2>{taskStatusLabels[sectionStatus]}</h2></div>
+                  <div className="pm-task-list-section-actions"><strong>{sectionTasks.length}</strong><ChevronDown aria-hidden="true" size={18} /></div>
+                </summary>
                 {sectionTasks.map((task) => (
                   <article className={`pm-task-list-row priority-${task.priority}`} key={task.id}>
                     <div className="pm-task-list-title"><strong><Link className="pm-task-title-link" href={`/admin/tasks/${task.id}`}>{task.title}</Link></strong>{task.description && <p>{task.description}</p>}{task.source_ticket_id && <span className="ticket-source"><ListTodo size={12} /> Ticket</span>}</div>
@@ -175,10 +178,10 @@ export default async function AdminTasksPage({ searchParams }: { searchParams: P
                     <span className={`priority-label ${task.priority}`}><Flag size={11} />{taskPriorityLabels[task.priority]}</span>
                     <span className="pm-task-list-visibility">{task.visibility === "superadmin_only" ? <ShieldCheck size={14} /> : task.visibility === "internal" ? <LockKeyhole size={14} /> : <Users size={14} />}{task.visibility === "superadmin_only" ? "Csak én" : task.visibility === "internal" ? "Belső" : "Ügyfél"}</span>
                     <span className="pm-task-list-date">{task.due_at ? <><CalendarDays size={14} />{task.start_date && <>{new Intl.DateTimeFormat("hu-HU", { month: "short", day: "numeric" }).format(new Date(`${task.start_date}T00:00:00`))} – </>}{new Intl.DateTimeFormat("hu-HU", { year: "numeric", month: "short", day: "numeric" }).format(new Date(task.due_at))}</> : task.start_date ? <><CalendarDays size={14} />{new Intl.DateTimeFormat("hu-HU", { year: "numeric", month: "short", day: "numeric" }).format(new Date(`${task.start_date}T00:00:00`))} –</> : "—"}</span>
-                    <form action={updateTaskStatus} className="task-status-form compact"><input name="taskId" type="hidden" value={task.id} /><select aria-label={`${task.title} státusza`} defaultValue={task.status} name="status">{taskStatuses.map((option) => <option key={option} value={option}>{taskStatusLabels[option]}</option>)}<option value="archived">Archiválás</option></select><button className="icon-button small" title="Státusz mentése" type="submit"><ExternalLink size={14} /></button></form>
+                    <form action={updateTaskStatus} className="task-status-form compact"><input name="taskId" type="hidden" value={task.id} /><span className="task-status-select-control"><select aria-label={`${task.title} státusza`} defaultValue={task.status} name="status">{taskStatuses.map((option) => <option key={option} value={option}>{taskStatusLabels[option]}</option>)}<option value="archived">Archiválás</option></select><ChevronDown aria-hidden="true" size={16} /></span><button className="icon-button small" title="Státusz mentése" type="submit"><ExternalLink size={14} /></button></form>
                   </article>
                 ))}
-              </section>;
+              </details>;
             })}
             {!filteredTasks.length && <div className="task-list-empty">Nincs a szűrésnek megfelelő feladat.</div>}
           </div>

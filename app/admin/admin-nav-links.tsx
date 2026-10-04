@@ -13,6 +13,7 @@ export default function AdminNavLinks({ adminPermissions, canManagePermissions }
 
   return (
     <nav className="nav" aria-label="Admin navigáció">
+      <span className="nav-section-label">MENÜ</span>
       {canViewCustomers && <Link className={`nav-link ${pathname === "/admin" ? "active" : ""}`} href="/admin"><Building2 size={17} /><span>Ügyfelek</span></Link>}
       {canViewProjects && <Link className={`nav-link ${pathname.startsWith("/admin/projects") ? "active" : ""}`} href="/admin/projects"><FolderKanban size={17} /><span>Projektek</span></Link>}
       {canViewProjects && <Link className={`nav-link ${pathname.startsWith("/admin/tasks") ? "active" : ""}`} href="/admin/tasks"><ListTodo size={17} /><span>Feladatok</span></Link>}

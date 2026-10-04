@@ -5,20 +5,22 @@ import { useEffect, useState } from "react";
 
 type Theme = "dark" | "light";
 
-function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
-  return window.localStorage.getItem("theme") === "light" ? "light" : "dark";
-}
-
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [theme, setTheme] = useState<Theme>("light");
+  const [mounted, setMounted] = useState(false);
   const isLight = theme === "light";
   const Icon = isLight ? Moon : Sun;
 
   useEffect(() => {
+    setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem("theme", theme);
-  }, [theme]);
+  }, [mounted, theme]);
 
   return (
     <button
