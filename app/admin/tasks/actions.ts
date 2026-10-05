@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { logAdminActivity } from "@/lib/activity-log";
 import { getCurrentAdminAccess } from "@/lib/admin-permissions";
 import { taskStatuses, type TaskPriority, type TaskStatus } from "@/lib/project-management";
@@ -287,6 +288,70 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
   revalidatePath("/admin/tasks");
   revalidatePath(`/admin/tasks/${task.id}`);
   return { success: "A feladat módosításai elmentve." };
+}
+
+export async function deleteTask(_previousState: TaskActionState, formData: FormData): Promise<TaskActionState> {
+  const taskId = text(formData.get("taskId"));
+  if (!taskId) return { error: "Hiányzik a feladat azonosítója." };
+
+  const access = await getCurrentAdminAccess();
+  if (!access.user) return { error: "A törléshez újra be kell jelentkezned." };
+  if (access.role !== "superadmin") return { error: "Feladatot csak superadmin törölhet." };
+
+  const adminSupabase = createAdminClient();
+  if (!adminSupabase) return { error: "Hiányzik a Supabase szerveroldali kulcs." };
+
+  const { data: currentTask, error: taskLookupError } = await adminSupabase
+    .from("tasks")
+    .select("id, organization_id, project_id, title, status, priority, visibility")
+    .eq("id", taskId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (taskLookupError || !currentTask) return { error: "A feladat nem található vagy már törölve lett." };
+
+  const deletedAt = new Date().toISOString();
+  const { data: deletedTask, error: deleteError } = await adminSupabase
+    .from("tasks")
+    .update({ deleted_at: deletedAt })
+    .eq("id", currentTask.id)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (deleteError || !deletedTask) {
+    console.error("Task soft delete failed", deleteError);
+    return { error: "Nem sikerült törölni a feladatot." };
+  }
+
+  const { error: commentsDeleteError } = await adminSupabase
+    .from("task_comments")
+    .update({ deleted_at: deletedAt })
+    .eq("task_id", currentTask.id)
+    .is("deleted_at", null);
+
+  if (commentsDeleteError) console.error("Task comments soft delete failed", commentsDeleteError);
+
+  await logAdminActivity({
+    actorUserId: access.user.id,
+    description: currentTask.title,
+    eventType: "task_deleted",
+    metadata: {
+      deletedAt,
+      priority: currentTask.priority,
+      status: currentTask.status,
+      taskId: currentTask.id,
+      visibility: currentTask.visibility,
+    },
+    organizationId: currentTask.organization_id,
+    projectId: currentTask.project_id,
+    title: "Feladat törölve",
+  });
+
+  revalidatePath("/admin/tasks");
+  revalidatePath(`/admin/tasks/${currentTask.id}`);
+  revalidatePath("/portal/tasks");
+  redirect("/admin/tasks");
 }
 
 export async function createTaskFromTicket(_previousState: TaskActionState, formData: FormData): Promise<TaskActionState> {
