@@ -2,7 +2,18 @@
 
 ## Aktuális cél
 
-A `meta_lead_caller` projektkategória bevezetése a portál és az admin teljes projektlétrehozási/szerkesztési folyamatába. A kód és a migráció helyben elkészült, a statikus ellenőrzések és a beküldés előtti ügyféloldali böngészős smoke teszt sikeres. A `20260930120000_add_meta_lead_caller_project_category.sql` migráció nincs alkalmazva; a kapcsolt helyi app valószínűleg az éles Supabase projektet használja, ezért alkalmazása és tesztrekord létrehozása csak kifejezett jóváhagyással történhet.
+A havi hanghasználat és a forintalapú használati költség bevezetésének külső ellenőrzése. A kód a `master` ágon, az `origin/master` állapotával egyezően a `e00a6e2` commitban van. A `20261005124746_project_minute_rate_huf.sql` migráció alkalmazási állapota ebben az átadásban nem lett ellenőrizve; cél Supabase projekt, migration history és felhasználói jóváhagyás nélkül ne alkalmazd.
+
+## Claude Code handoff (2026-10-05)
+
+- Git: az átadás előtti HEAD és `origin/master` egyaránt `e00a6e2` (`feat: calculate monthly voice usage cost`). A jelen dokumentációs handoff külön helyi commitba kerül; push nem történik.
+- A legutóbbi fejlesztés projektenként opcionális, nemnegatív `minute_rate_huf` mezőt, Europe/Budapest időzóna szerint csoportosított havi híváshasználatot és tört percekkel számolt HUF-költséget ad a portálhoz.
+- A `null` percdíj „nincs beállítva”, a `0` valódi nulla díj. A hónapok pontos másodperceket őriznek, és az aktuális hónap hívás nélkül is megjelenik.
+- Új, append-only migráció: `supabase/migrations/20261005124746_project_minute_rate_huf.sql`. Külső adatbázison nem futott ellenőrzés ebben a handoffban, ezért az alkalmazási állapot ismeretlen.
+- Közvetlen előzmények: superadmin feladat-soft-delete (`73d7a40`), portál dashboard/task board UI-frissítés (`84ded68`), portál email-értesítések és admin finomítások (`e2d84c5`).
+- Ellenőrzés 2026-10-05: `npm test` 5/5 sikeres; `npm run build` sikeres, 27 oldal; a build saját típusellenőrzése és az utána szekvenciálisan futtatott `npx tsc --noEmit --incremental false` sikeres. A builddel párhuzamos első külön `tsc` a közben újragenerált `.next/types` miatt hibázott, majd tisztán átment.
+- Szándékosan kihagyott, tulajdonjog szempontjából bizonytalan nem követett fájlok: `.claude/launch.json` és `public/ads/*.png`. Ezeket ne stage-eld automatikusan.
+- Következő konkrét lépés: olvasási módban azonosítsd a cél Supabase projektet és ellenőrizd a migration historyt. A felhasználó kifejezett jóváhagyása után alkalmazd a szükséges migrációt, majd ellenőrizd a havi használatot és költséget beállítatlan, nulla és pozitív percdíjjal, hívás nélküli hónappal, valamint budapesti hónapfordulónál. Deploy előtt kérdezz rá a helyi tesztadatok sorsára az `AGENTS.md` szerint.
 
 ## Meta lead hívó asszisztens kategória (2026-09-30)
 
