@@ -52,6 +52,14 @@ function optionalNonNegativeInteger(value: FormDataEntryValue | null) {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : Number.NaN;
 }
 
+function optionalMinuteRateHuf(value: FormDataEntryValue | null) {
+  const text = requiredText(value).replace(",", ".");
+  if (!text) return null;
+  if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return Number.NaN;
+  const rate = Number(text);
+  return Number.isFinite(rate) && rate <= 999999.99 ? rate : Number.NaN;
+}
+
 function getProjectRedirect(projectId: string, source: string) {
   return source === "projects" ? `/admin/projects/${projectId}?from=projects` : `/admin/projects/${projectId}`;
 }
@@ -246,6 +254,7 @@ export async function updateProjectMinuteLimits(_previousState: ProjectAdminActi
   const customerId = requiredText(formData.get("customerId"));
   const monthlyMinuteLimit = optionalNonNegativeInteger(formData.get("monthlyMinuteLimit"));
   const carryoverMinutes = optionalNonNegativeInteger(formData.get("carryoverMinutes"));
+  const minuteRateHuf = optionalMinuteRateHuf(formData.get("minuteRateHuf"));
 
   if (!projectId || !customerId) {
     return { error: "Hiányzik a projekt vagy az ügyfél azonosítója." };
@@ -253,6 +262,10 @@ export async function updateProjectMinuteLimits(_previousState: ProjectAdminActi
 
   if (Number.isNaN(monthlyMinuteLimit) || Number.isNaN(carryoverMinutes)) {
     return { error: "A havi keret és az átvihető percek csak nem negatív egész számok lehetnek." };
+  }
+
+  if (Number.isNaN(minuteRateHuf)) {
+    return { error: "A percdíj legfeljebb 999 999,99 Ft lehet, legfeljebb két tizedessel." };
   }
 
   const adminCheck = await assertSuperAdmin();
@@ -266,6 +279,7 @@ export async function updateProjectMinuteLimits(_previousState: ProjectAdminActi
     .update({
       monthly_minute_limit: monthlyMinuteLimit ?? 1000,
       carryover_minutes: carryoverMinutes ?? 500,
+      minute_rate_huf: minuteRateHuf,
       updated_at: new Date().toISOString(),
     })
     .eq("id", projectId)
@@ -284,9 +298,9 @@ export async function updateProjectMinuteLimits(_previousState: ProjectAdminActi
     eventType: "admin_project_minute_limits_updated",
     organizationId: customerId,
     projectId,
-    title: "Forgalmi keretek módosítva",
-    description: `${monthlyMinuteLimit ?? 1000} perc / ${carryoverMinutes ?? 500} perc átvihető`,
-    metadata: { carryoverMinutes: carryoverMinutes ?? 500, monthlyMinuteLimit: monthlyMinuteLimit ?? 1000 },
+    title: "Forgalmi beállítások módosítva",
+    description: `${monthlyMinuteLimit ?? 1000} perc / ${carryoverMinutes ?? 500} perc átvihető / ${minuteRateHuf === null ? "nincs percdíj" : `${minuteRateHuf} Ft/perc`}`,
+    metadata: { carryoverMinutes: carryoverMinutes ?? 500, minuteRateHuf, monthlyMinuteLimit: monthlyMinuteLimit ?? 1000 },
   });
 
   revalidatePath("/admin");
@@ -297,7 +311,7 @@ export async function updateProjectMinuteLimits(_previousState: ProjectAdminActi
   revalidatePath("/portal/projects");
   revalidatePath(`/portal/agents/${projectId}`);
 
-  return { success: "A forgalmi keretek mentve." };
+  return { success: "A forgalmi beállítások mentve." };
 }
 
 export async function updateProjectPhone(_previousState: ProjectAdminActionState, formData: FormData) {

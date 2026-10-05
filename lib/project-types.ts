@@ -27,6 +27,7 @@ export type Project = {
   knowledgeAssetsReceived: boolean;
   monthlyMinuteLimit: number | null;
   carryoverMinutes: number | null;
+  minuteRateHuf: number | null;
   status: ProjectStatus;
   telnyxStatus: TelnyxStatus;
   greeting: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, BellRing, Bot, CalendarClock, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, FileCheck2, FileText, FolderKanban, KeyRound, Layers3, LinkIcon, Mail, MessageSquareText, Pencil, Phone, PlayCircle, Save, Settings2, Trash2, TriangleAlert, Upload } from "lucide-react";
+import { AlertCircle, Banknote, BellRing, Bot, CalendarClock, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, FileCheck2, FileText, FolderKanban, KeyRound, Layers3, LinkIcon, Mail, MessageSquareText, Pencil, Phone, PlayCircle, Save, Settings2, Trash2, TriangleAlert, Upload } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -9,6 +9,7 @@ import { FormDatePicker } from "@/app/form-date-picker";
 import { getTodayDateInputValue } from "@/lib/date-input";
 import { categoryLabels, documentStatusLabels, googleAccessStatusLabels, phoneRequestLabels, statusLabels, telnyxStatusLabels, type DocumentProcessingStatus, type Project } from "@/lib/project-types";
 import type { ElevenLabsConversation, ElevenLabsKnowledgeBaseDocument } from "@/lib/elevenlabs";
+import { calculateUsageCostHuf, getUsageMonthKey, summarizeMonthlyUsage, type ConversationUsage } from "@/lib/usage";
 import { deleteProjectConversation, provisionElevenLabsAgent, updateAgentKnowledgeBaseDocument as updateAdminAgentKnowledgeBaseDocument, updateElevenLabsAgentId, updateProjectAssetFlags, updateProjectGoogleAccess, updateProjectMinuteLimits, updateProjectPhone, updateProjectSettings, type ProjectAdminActionState } from "@/app/admin/projects/[id]/actions";
 import { submitProjectForReview, updateAgentKnowledgeBaseDocument as updateCustomerAgentKnowledgeBaseDocument, updateVoiceAgentSetup, uploadKnowledgeDocument, type AgentKnowledgeUpdateState, type KnowledgeUploadState, type ReviewRequestState, type VoiceSetupState } from "./actions";
 
@@ -65,10 +66,12 @@ function formatDuration(seconds: number | null) {
 
 function formatMinuteValue(seconds: number) {
   if (seconds <= 0) return "0 perc";
-  const minutes = seconds / 60;
-  if (minutes < 1) return "<1 perc";
-  const rounded = minutes < 10 ? minutes.toFixed(1) : Math.round(minutes).toString();
-  return `${rounded.replace(".", ",")} perc`;
+  const minutes = new Intl.NumberFormat("hu-HU", { maximumFractionDigits: 2 }).format(seconds / 60);
+  return `${minutes} perc`;
+}
+
+function formatCostHuf(value: number | null) {
+  return value === null ? "Nincs percdíj" : new Intl.NumberFormat("hu-HU", { style: "currency", currency: "HUF", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
 }
 
 function parseDateValue(value: string) {
@@ -192,11 +195,6 @@ function DateFilterPicker({ label, onChange, value }: { label: string; onChange:
   );
 }
 
-function getMonthKey(seconds: number) {
-  const date = new Date(seconds * 1000);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
 function getMonthLabel(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
   return new Intl.DateTimeFormat("hu-HU", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
@@ -272,7 +270,7 @@ function getOnboardingOverview(project: Project, phoneDocumentStatus: string) {
   return { items, summary, summaryStatus };
 }
 
-export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnowledgeBase, conversations }: { adminSettings?: { canManageProjects: boolean; customerId: string; source: string }; project: Project; completion: number; elevenLabsKnowledgeBase?: { documents: ElevenLabsKnowledgeBaseDocument[]; error: string | null }; conversations?: { conversations: ElevenLabsConversation[]; error: string | null } }) {
+export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnowledgeBase, conversations }: { adminSettings?: { canManageProjects: boolean; customerId: string; source: string }; project: Project; completion: number; elevenLabsKnowledgeBase?: { documents: ElevenLabsKnowledgeBaseDocument[]; error: string | null }; conversations?: { conversations: ElevenLabsConversation[]; usageConversations: ConversationUsage[]; error: string | null } }) {
   const isAdminView = Boolean(adminSettings);
   const canEditProject = adminSettings?.canManageProjects ?? false;
   const visibleTabs = useMemo(() => [
@@ -301,6 +299,8 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
   const [conversationMinDuration, setConversationMinDuration] = useState("");
   const [conversationMaxDuration, setConversationMaxDuration] = useState("");
   const [conversationPage, setConversationPage] = useState(1);
+  const currentMonthKey = getUsageMonthKey(Math.floor(Date.now() / 1000));
+  const [selectedUsageMonth, setSelectedUsageMonth] = useState(currentMonthKey);
   const [setupState, setupAction, setupPending] = useActionState(updateVoiceAgentSetup, voiceInitialState);
   const [uploadState, uploadAction, uploadPending] = useActionState(uploadKnowledgeDocument, uploadInitialState);
   const [projectSettingsState, projectSettingsAction, projectSettingsPending] = useActionState<ProjectAdminActionState, FormData>(updateProjectSettings, projectSettingsInitialState);
@@ -362,52 +362,15 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
   const conversationItems = conversations?.conversations ?? [];
   const monthlyMinuteLimit = project.monthlyMinuteLimit ?? 1000;
   const carryoverMinutes = project.carryoverMinutes ?? Math.round(monthlyMinuteLimit * 0.5);
-  const usageSummary = useMemo(() => {
-    const now = new Date();
-    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const months = new Map<string, { conversationCount: number; seconds: number }>();
-    let currentMonthSeconds = 0;
-    let totalSeconds = 0;
-    let totalConversationCount = 0;
-    let undatedSeconds = 0;
-
-    conversationItems.forEach((conversation) => {
-      if (conversation.callDurationSecs === null) return;
-      totalSeconds += conversation.callDurationSecs;
-      totalConversationCount += 1;
-
-      if (!conversation.startTimeUnix) {
-        undatedSeconds += conversation.callDurationSecs;
-        return;
-      }
-
-      const monthKey = getMonthKey(conversation.startTimeUnix);
-      const existingMonth = months.get(monthKey) ?? { conversationCount: 0, seconds: 0 };
-      existingMonth.conversationCount += 1;
-      existingMonth.seconds += conversation.callDurationSecs;
-      months.set(monthKey, existingMonth);
-
-      if (monthKey === currentMonthKey) currentMonthSeconds += conversation.callDurationSecs;
-    });
-
-    if (!months.has(currentMonthKey)) {
-      months.set(currentMonthKey, { conversationCount: 0, seconds: 0 });
-    }
-
-    const availableSeconds = (monthlyMinuteLimit + carryoverMinutes) * 60;
-    const remainingSeconds = Math.max(0, availableSeconds - currentMonthSeconds);
-    const monthItems = Array.from(months.entries())
-      .map(([monthKey, value]) => ({
-        conversationCount: value.conversationCount,
-        key: monthKey,
-        label: getMonthLabel(monthKey),
-        seconds: value.seconds,
-      }))
-      .sort((a, b) => b.key.localeCompare(a.key));
-    const maxMonthSeconds = Math.max(...monthItems.map((item) => item.seconds), 1);
-
-    return { availableSeconds, currentMonthSeconds, maxMonthSeconds, monthItems, remainingSeconds, totalConversationCount, totalSeconds, undatedSeconds };
-  }, [carryoverMinutes, conversationItems, monthlyMinuteLimit]);
+  const usageSummary = useMemo(
+    () => summarizeMonthlyUsage(conversations?.usageConversations ?? [], currentMonthKey),
+    [conversations?.usageConversations, currentMonthKey],
+  );
+  const availableSeconds = (monthlyMinuteLimit + carryoverMinutes) * 60;
+  const remainingSeconds = Math.max(0, availableSeconds - usageSummary.currentMonthSeconds);
+  const selectedUsage = usageSummary.monthItems.find((item) => item.key === selectedUsageMonth)
+    ?? usageSummary.monthItems[0]
+    ?? { key: currentMonthKey, conversationCount: 0, seconds: 0 };
   const filteredConversationItems = useMemo(() => conversationItems.filter((conversation) => {
     const startedAt = conversation.startTimeUnix ? new Date(conversation.startTimeUnix * 1000) : null;
     const fromDate = conversationDateFrom ? new Date(`${conversationDateFrom}T00:00:00`) : null;
@@ -875,9 +838,9 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
             <div className="tab-card">
               <div className="tab-heading">
                 <h2>Felhasznált percek</h2>
-                <p>A beszélgetések hossza alapján számolt havi és összesített használat.</p>
+                <p>A beszélgetések hossza alapján számolt havi használat és becsült költség.</p>
               </div>
-              {conversations?.error && <p className="form-error">Nem sikerült beolvasni a perc felhasználást.</p>}
+              {conversations?.error && <p className="form-error">Nem sikerült beolvasni a teljes forgalmat. A havi értékek most nem jeleníthetők meg.</p>}
               {canEditProject && adminSettings && (
                 <form action={minuteLimitsAction} className="usage-limit-form">
                   <input name="projectId" type="hidden" value={project.id} />
@@ -885,70 +848,83 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                   <div className="settings-form-grid">
                     <label className="field"><span>Havi keret</span><input min="0" name="monthlyMinuteLimit" type="number" defaultValue={monthlyMinuteLimit} /></label>
                     <label className="field"><span>Átvihető percek</span><input min="0" name="carryoverMinutes" type="number" defaultValue={carryoverMinutes} /></label>
+                    <label className="field"><span>Percdíj (Ft/perc)</span><input min="0" max="999999.99" step="0.01" name="minuteRateHuf" type="number" defaultValue={project.minuteRateHuf ?? ""} placeholder="Nincs beállítva" /></label>
                   </div>
                   {minuteLimitsState.error && <p className="form-error">{minuteLimitsState.error}</p>}
                   {minuteLimitsState.success && <p className="form-success">{minuteLimitsState.success}</p>}
                   <div className="settings-actions compact-actions">
                     <span className="save-note"><Clock3 size={15} /> Alapértelmezett keret: 1000 perc, átvihető: 50%.</span>
-                    <button className="button" disabled={minuteLimitsPending} type="submit">{minuteLimitsPending ? "Mentés..." : "Keret mentése"} <Save size={15} /></button>
+                    <button className="button" disabled={minuteLimitsPending} type="submit">{minuteLimitsPending ? "Mentés..." : "Beállítások mentése"} <Save size={15} /></button>
                   </div>
                 </form>
               )}
-              <div className="usage-summary-grid">
-                <Scorecard icon={Clock3} label="Aktuális hónap" value={formatMinuteValue(usageSummary.currentMonthSeconds)} />
-                <Scorecard icon={CalendarClock} label="Eddig összesen" value={formatMinuteValue(usageSummary.totalSeconds)} />
-                <Scorecard icon={MessageSquareText} label="Mért beszélgetések" value={`${usageSummary.totalConversationCount}`} />
-              </div>
-              <div className="usage-summary-grid usage-quota-grid">
-                <Scorecard icon={Clock3} label="Havi keret" value={`${monthlyMinuteLimit} perc`} />
-                <Scorecard icon={CalendarClock} label="Átvihető percek" value={`${carryoverMinutes} perc`} />
-                <Scorecard icon={CheckCircle2} label="Elérhető maradék" value={usageSummary.availableSeconds > 0 ? formatMinuteValue(usageSummary.remainingSeconds) : "Nincs keret"} />
-              </div>
+              {!conversations?.error && <>
+                <div className="usage-month-picker">
+                  <label className="field">
+                    <span>Hónap</span>
+                    <select value={selectedUsage.key} onChange={(event) => setSelectedUsageMonth(event.target.value)}>
+                      {usageSummary.monthItems.map((item) => <option key={item.key} value={item.key}>{getMonthLabel(item.key)}</option>)}
+                    </select>
+                  </label>
+                  <span>Jelenlegi percdíj: {project.minuteRateHuf === null ? "nincs beállítva" : `${formatCostHuf(project.minuteRateHuf)}/perc`}</span>
+                </div>
+                <div className="usage-summary-grid">
+                  <Scorecard icon={Clock3} label="Felhasznált idő" value={formatMinuteValue(selectedUsage.seconds)} />
+                  <Scorecard icon={Banknote} label="Becsült költség" value={formatCostHuf(calculateUsageCostHuf(selectedUsage.seconds, project.minuteRateHuf))} />
+                  <Scorecard icon={MessageSquareText} label="Beszélgetések" value={`${selectedUsage.conversationCount}`} />
+                </div>
+                <p className="usage-cost-note">Összesen {formatMinuteValue(usageSummary.totalSeconds)} · {usageSummary.totalConversationCount} beszélgetés. A költség becslés a jelenlegi percdíjjal és a tényleges másodpercekkel; a korábbi hónapokra is ez a díj érvényes.</p>
+                <div className="usage-summary-grid usage-quota-grid">
+                  <Scorecard icon={Clock3} label="Aktuális havi keret" value={`${monthlyMinuteLimit} perc`} />
+                  <Scorecard icon={CalendarClock} label="Átvihető percek" value={`${carryoverMinutes} perc`} />
+                  <Scorecard icon={CheckCircle2} label="Aktuális maradék" value={availableSeconds > 0 ? formatMinuteValue(remainingSeconds) : "Nincs keret"} />
+                </div>
 
-              <div className="usage-section">
-                <div className="section-subheading">
-                  <h3>Havi bontás</h3>
-                  <span>{usageSummary.monthItems.length} hónap</span>
-                </div>
-                <div className="usage-chart" aria-label="Havi perc felhasználás">
-                  {usageSummary.monthItems.map((item) => (
-                    <div className="usage-chart-row" key={item.key}>
-                      <span>{item.label}</span>
-                      <div className="usage-bar-track">
-                        <div className="usage-bar" style={{ width: `${Math.max(3, (item.seconds / usageSummary.maxMonthSeconds) * 100)}%` }} />
+                <div className="usage-section">
+                  <div className="section-subheading">
+                    <h3>Havi bontás</h3>
+                    <span>{usageSummary.monthItems.length} hónap</span>
+                  </div>
+                  <div className="usage-chart" aria-label="Havi perc felhasználás">
+                    {usageSummary.monthItems.map((item) => (
+                      <div className="usage-chart-row" key={item.key}>
+                        <span>{getMonthLabel(item.key)}</span>
+                        <div className="usage-bar-track">
+                          <div className="usage-bar" style={{ width: `${Math.max(3, (item.seconds / usageSummary.maxMonthSeconds) * 100)}%` }} />
+                        </div>
+                        <strong>{formatMinuteValue(item.seconds)}</strong>
                       </div>
-                      <strong>{formatMinuteValue(item.seconds)}</strong>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              <div className="usage-section">
-                <div className="section-subheading">
-                  <h3>Lista</h3>
-                  <span>Beszélgetéshossz alapján</span>
-                </div>
-                <div className="usage-list">
-                  {usageSummary.monthItems.map((item) => (
-                    <div className="usage-list-row" key={item.key}>
-                      <div>
-                        <strong>{item.label}</strong>
-                        <span>{item.conversationCount} beszélgetés</span>
+                <div className="usage-section">
+                  <div className="section-subheading">
+                    <h3>Lista</h3>
+                    <span>Beszélgetéshossz alapján</span>
+                  </div>
+                  <div className="usage-list">
+                    {usageSummary.monthItems.map((item) => (
+                      <div className="usage-list-row" key={item.key}>
+                        <div>
+                          <strong>{getMonthLabel(item.key)}</strong>
+                          <span>{item.conversationCount} beszélgetés</span>
+                        </div>
+                        <div className="usage-list-values"><span>{formatMinuteValue(item.seconds)}</span><strong>{formatCostHuf(calculateUsageCostHuf(item.seconds, project.minuteRateHuf))}</strong></div>
                       </div>
-                      <span>{formatMinuteValue(item.seconds)}</span>
-                    </div>
-                  ))}
-                  {usageSummary.undatedSeconds > 0 && (
-                    <div className="usage-list-row muted-row">
-                      <div>
-                        <strong>Dátum nélküli beszélgetések</strong>
-                        <span>Az API nem adott kezdési időt</span>
+                    ))}
+                    {usageSummary.undatedSeconds > 0 && (
+                      <div className="usage-list-row muted-row">
+                        <div>
+                          <strong>Dátum nélküli beszélgetések</strong>
+                          <span>Az API nem adott kezdési időt</span>
+                        </div>
+                        <span>{formatMinuteValue(usageSummary.undatedSeconds)}</span>
                       </div>
-                      <span>{formatMinuteValue(usageSummary.undatedSeconds)}</span>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
+              </>}
             </div>
           </div>
         )}

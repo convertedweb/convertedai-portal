@@ -23,6 +23,7 @@ export const mockProjects: Project[] = [
     knowledgeAssetsReceived: false,
     monthlyMinuteLimit: 1000,
     carryoverMinutes: 500,
+    minuteRateHuf: null,
     status: "live",
     telnyxStatus: "connected",
     greeting: "Jó napot kívánok, Anna vagyok, a DentCare telefonos asszisztense.",
@@ -58,6 +59,7 @@ export const mockProjects: Project[] = [
     knowledgeAssetsReceived: false,
     monthlyMinuteLimit: 1000,
     carryoverMinutes: 500,
+    minuteRateHuf: null,
     status: "building",
     telnyxStatus: "requested",
     greeting: "Jó napot kívánok, a Kovács Iroda telefonos asszisztense vagyok.",
@@ -96,6 +98,7 @@ type DatabaseProject = {
   knowledge_assets_received: boolean | null;
   monthly_minute_limit: number | null;
   carryover_minutes: number | null;
+  minute_rate_huf?: number | null;
   status: ProjectStatus;
   telnyx_status: TelnyxStatus | null;
   greeting: string | null;
@@ -199,6 +202,7 @@ function mapProject(project: DatabaseProject, documents: DatabaseDocument[]): Pr
     knowledgeAssetsReceived: project.knowledge_assets_received ?? false,
     monthlyMinuteLimit: project.monthly_minute_limit ?? 1000,
     carryoverMinutes: project.carryover_minutes ?? 500,
+    minuteRateHuf: project.minute_rate_huf ?? null,
     status: project.status,
     telnyxStatus: project.telnyx_status ?? (project.phone_number ? "connected" : "pending"),
     greeting: project.greeting ?? "",
@@ -345,6 +349,12 @@ export async function getProject(id: string) {
     if (projectError || !projectRow) return null;
 
     const project = projectRow as DatabaseProject;
+    const { data: rateRow } = await supabase
+      .from("projects")
+      .select("minute_rate_huf")
+      .eq("id", id)
+      .single();
+    project.minute_rate_huf = rateRow?.minute_rate_huf ?? null;
     const { data: documentRows, error: documentError } = await supabase
       .from("documents")
       .select("id, project_id, category, file_name, mime_type, size_bytes, processing_status, created_at")

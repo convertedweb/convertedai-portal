@@ -1,3 +1,5 @@
+import type { ConversationUsage } from "@/lib/usage";
+
 type CreateElevenLabsAgentInput = {
   agentName: string;
   companyName: string;
@@ -79,6 +81,8 @@ type ElevenLabsConversationListItem = {
 
 type ElevenLabsConversationsResponse = {
   conversations?: ElevenLabsConversationListItem[];
+  has_more?: boolean;
+  next_cursor?: string | null;
 };
 
 type ElevenLabsConversationDetailsResponse = {
@@ -288,41 +292,58 @@ export async function listElevenLabsConversations(agentId?: string | null, proje
   const apiKey = getElevenLabsApiKey();
 
   if (!apiKey) {
-    return { conversations: [], error: "Hiányzik az ELEVENLABS_API_KEY környezeti változó." };
+    return { conversations: [], usageConversations: [], error: "Hiányzik az ELEVENLABS_API_KEY környezeti változó." };
   }
 
   if (!agentId || !projectId) {
-    return { conversations: [], error: null };
+    return { conversations: [], usageConversations: [], error: null };
   }
 
   const url = new URL("https://api.elevenlabs.io/v1/convai/conversations");
   url.searchParams.set("agent_id", agentId);
-  url.searchParams.set("page_size", "20");
+  url.searchParams.set("page_size", "100");
 
-  const response = await fetch(url, {
-    cache: "no-store",
-    headers: {
-      "xi-api-key": apiKey,
-    },
-  });
+  const allConversations: ElevenLabsConversationListItem[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
 
-  const responseText = await response.text();
-  let payload: ElevenLabsConversationsResponse | null = null;
+  do {
+    if (cursor) url.searchParams.set("cursor", cursor);
+    const response = await fetch(url, {
+      cache: "no-store",
+      headers: { "xi-api-key": apiKey },
+    });
 
-  try {
-    payload = responseText ? JSON.parse(responseText) as ElevenLabsConversationsResponse : null;
-  } catch {
-    payload = null;
-  }
+    if (!response.ok) {
+      return { conversations: [], usageConversations: [], error: `Beszélgetések beolvasása sikertelen: ${response.status} ${response.statusText}` };
+    }
 
-  if (!response.ok) {
-    return {
-      conversations: [],
-      error: `Beszélgetések beolvasása sikertelen: ${response.status} ${response.statusText}`,
-    };
-  }
+    let payload: ElevenLabsConversationsResponse;
+    try {
+      payload = await response.json() as ElevenLabsConversationsResponse;
+    } catch {
+      return { conversations: [], usageConversations: [], error: "A beszélgetések válasza nem értelmezhető." };
+    }
 
-  const conversations = await Promise.all((payload?.conversations ?? [])
+    if (!Array.isArray(payload.conversations)) {
+      return { conversations: [], usageConversations: [], error: "A beszélgetések válasza hiányos." };
+    }
+
+    allConversations.push(...payload.conversations);
+    if (!payload.has_more) break;
+    if (!payload.next_cursor || seenCursors.has(payload.next_cursor)) {
+      return { conversations: [], usageConversations: [], error: "A teljes forgalom nem olvasható be." };
+    }
+    cursor = payload.next_cursor;
+    seenCursors.add(cursor);
+  } while (true);
+
+  const usageConversations: ConversationUsage[] = allConversations.map((conversation) => ({
+    callDurationSecs: conversation.call_duration_secs ?? null,
+    startTimeUnix: conversation.start_time_unix_secs ?? null,
+  }));
+
+  const conversations = await Promise.all(allConversations.slice(0, 20)
     .filter((conversation) => conversation.conversation_id)
     .map(async (conversation) => {
       const conversationId = conversation.conversation_id as string;
@@ -345,7 +366,7 @@ export async function listElevenLabsConversations(agentId?: string | null, proje
       };
     }));
 
-  return { conversations, error: null };
+  return { conversations, usageConversations, error: null };
 }
 
 export async function getElevenLabsConversationDetails(conversationId: string) {
