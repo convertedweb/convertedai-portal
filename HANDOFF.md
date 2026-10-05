@@ -2,7 +2,18 @@
 
 ## Aktuális cél
 
-A havi hanghasználat és a forintalapú használati költség bevezetésének külső ellenőrzése. A kód a `master` ágon, az `origin/master` állapotával egyezően a `e00a6e2` commitban van. A `20261005124746_project_minute_rate_huf.sql` migráció alkalmazási állapota ebben az átadásban nem lett ellenőrizve; cél Supabase projekt, migration history és felhasználói jóváhagyás nélkül ne alkalmazd.
+A Meta lead hívó asszisztensek többűrlapos leadforrás-kezelésének külső ellenőrzése. A megvalósítás projektenként egy Facebook-oldalt és több Meta lead űrlapot kezel. A `20261005160000_add_meta_lead_sources.sql` migráció alkalmazási állapota ebben az átadásban nem lett ellenőrizve; cél Supabase projekt, migration history és felhasználói jóváhagyás nélkül ne alkalmazd.
+
+## Claude Code handoff – Meta lead források (2026-10-05)
+
+- A `meta_lead_caller` projektek új „Lead űrlapok” fület kaptak az admin- és ügyféloldali projektnézetben.
+- Új adatmodell: `integration_connections` projektenként egy aktív provider-kapcsolattal, valamint `lead_sources` több Meta Form ID tárolására. Mindkét tábla tenant-kompozit idegen kulcsot, soft delete-et, RLS-t és csak olvasási `authenticated` jogosultságot kap; írás a szerveroldali admin kliensen keresztül történik.
+- A kliensfelület megmutatja a kapcsolt Facebook-oldalt, az aktív/összes űrlapszámot és a legutóbbi lead időpontját. A superadmin oldalkapcsolatot menthet, űrlapot adhat hozzá, szüneteltethet, visszakapcsolhat és soft-delete-tel leválaszthat.
+- A server actionök újraellenőrzik a superadmin jogosultságot, a `meta_lead_caller` kategóriát, az `organization_id`/`project_id` határt és a `deleted_at is null` feltételt; a műveletek aktivitásnaplóba kerülnek.
+- Érintett fájlok: `app/admin/projects/[id]/page.tsx`, `app/portal/agents/[id]/page.tsx`, `app/portal/agents/[id]/project-tabs.tsx`, `app/portal/agents/[id]/meta-lead-actions.ts`, `app/portal/agents/[id]/meta-lead-sources-panel.tsx`, `lib/meta-leads.ts`, `app/globals.css`, valamint `supabase/migrations/20261005160000_add_meta_lead_sources.sql`.
+- Ellenőrzés 2026-10-05: `npm test` 5/5 sikeres; `npm run build` sikeres, 27 oldal; `npx tsc --noEmit --incremental false` sikeres; a migráció SQL-jének statikus jogosultsági és tenant-határ ellenőrzése megtörtént. Külső Supabase-migráció és bejelentkezett kézi teszt nem futott.
+- Szándékosan kihagyandó, nem követett helyi tartalom: `.claude/launch.json` és `public/ads/*.png`. Ezek nem részei ennek a fejlesztésnek, ne stage-eld őket automatikusan.
+- Következő konkrét lépés: olvasási módban azonosítsd a cél Supabase projektet és ellenőrizd a migration historyt. Kifejezett jóváhagyás után alkalmazd a migrációt, majd valódi superadminnal ellenőrizd az oldal- és többűrlapos CRUD-folyamatot, normál adminnal az írás tiltását, ügyféllel az RLS szerinti saját projektes olvasást, továbbá a soft delete-et és a duplikált Meta Form ID hibáját. Deploy előtt kérdezz rá a helyi tesztadatok sorsára az `AGENTS.md` szerint.
 
 ## Claude Code handoff (2026-10-05)
 

@@ -9,11 +9,13 @@ import { FormDatePicker } from "@/app/form-date-picker";
 import { getTodayDateInputValue } from "@/lib/date-input";
 import { categoryLabels, documentStatusLabels, googleAccessStatusLabels, phoneRequestLabels, statusLabels, telnyxStatusLabels, type DocumentProcessingStatus, type Project } from "@/lib/project-types";
 import type { ElevenLabsConversation, ElevenLabsKnowledgeBaseDocument } from "@/lib/elevenlabs";
+import type { MetaLeadSourcesResult } from "@/lib/meta-leads";
 import { calculateUsageCostHuf, getUsageMonthKey, summarizeMonthlyUsage, type ConversationUsage } from "@/lib/usage";
 import { deleteProjectConversation, provisionElevenLabsAgent, updateAgentKnowledgeBaseDocument as updateAdminAgentKnowledgeBaseDocument, updateElevenLabsAgentId, updateProjectAssetFlags, updateProjectGoogleAccess, updateProjectMinuteLimits, updateProjectPhone, updateProjectSettings, type ProjectAdminActionState } from "@/app/admin/projects/[id]/actions";
 import { submitProjectForReview, updateAgentKnowledgeBaseDocument as updateCustomerAgentKnowledgeBaseDocument, updateVoiceAgentSetup, uploadKnowledgeDocument, type AgentKnowledgeUpdateState, type KnowledgeUploadState, type ReviewRequestState, type VoiceSetupState } from "./actions";
+import { MetaLeadSourcesPanel } from "./meta-lead-sources-panel";
 
-type TabId = "project-settings" | "setup" | "documents" | "phone" | "google-access" | "usage" | "activity" | "live-agent";
+type TabId = "project-settings" | "setup" | "meta-lead-sources" | "documents" | "phone" | "google-access" | "usage" | "activity" | "live-agent";
 
 type Tab = {
   id: TabId;
@@ -270,19 +272,20 @@ function getOnboardingOverview(project: Project, phoneDocumentStatus: string) {
   return { items, summary, summaryStatus };
 }
 
-export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnowledgeBase, conversations }: { adminSettings?: { canManageProjects: boolean; customerId: string; source: string }; project: Project; completion: number; elevenLabsKnowledgeBase?: { documents: ElevenLabsKnowledgeBaseDocument[]; error: string | null }; conversations?: { conversations: ElevenLabsConversation[]; usageConversations: ConversationUsage[]; error: string | null } }) {
+export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnowledgeBase, conversations, metaLeadSources }: { adminSettings?: { canManageProjects: boolean; customerId: string; source: string }; project: Project; completion: number; elevenLabsKnowledgeBase?: { documents: ElevenLabsKnowledgeBaseDocument[]; error: string | null }; conversations?: { conversations: ElevenLabsConversation[]; usageConversations: ConversationUsage[]; error: string | null }; metaLeadSources?: MetaLeadSourcesResult }) {
   const isAdminView = Boolean(adminSettings);
   const canEditProject = adminSettings?.canManageProjects ?? false;
   const visibleTabs = useMemo(() => [
     { id: "project-settings" as const, label: "Projekt részletek" },
     { id: "setup" as const, label: "Agent beállítások" },
+    ...(project.category === "meta_lead_caller" ? [{ id: "meta-lead-sources" as const, label: "Lead űrlapok" }] : []),
     ...(isAdminView ? [{ id: "google-access" as const, label: "Google hozzáférés" }] : []),
     { id: "documents" as const, label: "Tudásbázis" },
     ...(isAdminView ? [{ id: "phone" as const, label: "Telefon" }] : []),
     { id: "usage" as const, label: "Forgalom" },
     { id: "activity" as const, label: "Aktivitás" },
     ...(!isAdminView ? [{ id: "live-agent" as const, label: "Élő agent" }] : []),
-  ], [isAdminView]);
+  ], [isAdminView, project.category]);
   const searchParams = useSearchParams();
   const getInitialTab = () => {
     const requestedTab = searchParams.get("tab") as TabId | null;
@@ -628,6 +631,17 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "meta-lead-sources" && project.category === "meta_lead_caller" && (
+          <div className="tab-content">
+            <div className="tab-card">
+              <div className="tab-heading">
+                <div><p className="eyebrow">Meta Lead Ads</p><h2>Kapcsolt lead űrlapok</h2><p>Egy hívó asszisztenshez egy Facebook-oldal és egyszerre több lead űrlap kapcsolható.</p></div>
+              </div>
+              <MetaLeadSourcesPanel canEdit={canEditProject} projectId={project.id} result={metaLeadSources ?? { available: false, connection: null, sources: [] }} />
             </div>
           </div>
         )}

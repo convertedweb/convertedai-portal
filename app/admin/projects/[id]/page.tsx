@@ -5,6 +5,7 @@ import { ProjectTabs } from "@/app/portal/agents/[id]/project-tabs";
 import { getAdminProject } from "@/lib/admin-data";
 import { statusLabels } from "@/lib/data";
 import { listElevenLabsConversations, listElevenLabsKnowledgeBaseDocuments } from "@/lib/elevenlabs";
+import { getMetaLeadSources } from "@/lib/meta-leads";
 import { ProjectAdminActions } from "./delete-project-button";
 
 export default async function AdminProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ from?: string }> }) {
@@ -31,8 +32,11 @@ export default async function AdminProjectPage({ params, searchParams }: { param
   if (!project || !customer) notFound();
 
   const completion = project.documents > 0 ? Math.round((project.documentsReady / project.documents) * 100) : 0;
-  const elevenLabsKnowledgeBase = await listElevenLabsKnowledgeBaseDocuments(project.elevenLabsAgentId);
-  const conversations = await listElevenLabsConversations(project.elevenLabsAgentId, project.id);
+  const [elevenLabsKnowledgeBase, conversations, metaLeadSources] = await Promise.all([
+    listElevenLabsKnowledgeBaseDocuments(project.elevenLabsAgentId),
+    listElevenLabsConversations(project.elevenLabsAgentId, project.id),
+    project.category === "meta_lead_caller" ? getMetaLeadSources(project.id) : Promise.resolve(undefined),
+  ]);
   const backHref = from === "tasks" ? "/admin/tasks" : from === "projects" ? "/admin/projects" : `/admin/customers/${customer.id}/edit`;
   const backLabel = from === "tasks" ? "Vissza a teendőkhöz" : from === "projects" ? "Vissza a projektekhez" : "Vissza az ügyfélhez";
 
@@ -52,7 +56,7 @@ export default async function AdminProjectPage({ params, searchParams }: { param
         </div>
       </div>
 
-      <ProjectTabs adminSettings={{ canManageProjects, customerId: customer.id, source: from ?? "" }} project={project} completion={completion} elevenLabsKnowledgeBase={elevenLabsKnowledgeBase} conversations={conversations} />
+      <ProjectTabs adminSettings={{ canManageProjects, customerId: customer.id, source: from ?? "" }} project={project} completion={completion} elevenLabsKnowledgeBase={elevenLabsKnowledgeBase} conversations={conversations} metaLeadSources={metaLeadSources} />
     </section>
   );
 }
