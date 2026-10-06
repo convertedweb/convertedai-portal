@@ -639,7 +639,7 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
           <div className="tab-content">
             <div className="tab-card">
               <div className="tab-heading">
-                <div><p className="eyebrow">Meta Lead Ads</p><h2>Kapcsolt lead űrlapok</h2><p>Egy hívó asszisztenshez egy Facebook-oldal és egyszerre több lead űrlap kapcsolható.</p></div>
+                <div><p className="eyebrow">Lead források</p><h2>Kapcsolt lead űrlapok</h2><p>Egy hívó asszisztenshez egy Facebook-oldal több Meta lead űrlapja és tetszőleges számú weboldal űrlap kapcsolható.</p></div>
               </div>
               <MetaLeadSourcesPanel canEdit={canEditProject} projectId={project.id} result={metaLeadSources ?? { available: false, connection: null, sources: [] }} />
             </div>

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { LeadSourceType } from "@/lib/lead-sources";
 
 export type MetaLeadSource = {
   createdAt: string;
@@ -6,8 +7,10 @@ export type MetaLeadSource = {
   id: string;
   lastLeadReceivedAt: string | null;
   lastTestLeadAt: string | null;
-  formId: string;
+  formId: string | null;
   formName: string;
+  sourceType: LeadSourceType;
+  websiteUrl: string | null;
 };
 
 type MetaLeadSourceRow = {
@@ -16,8 +19,10 @@ type MetaLeadSourceRow = {
   id: string;
   last_lead_received_at: string | null;
   last_test_lead_at: string | null;
-  meta_form_id: string;
+  meta_form_id: string | null;
   meta_form_name: string;
+  source_type: LeadSourceType;
+  website_url: string | null;
 };
 
 export type MetaPageConnection = {
@@ -55,7 +60,7 @@ export async function getMetaLeadSources(projectId: string): Promise<MetaLeadSou
       .maybeSingle(),
     supabase
       .from("lead_sources")
-      .select("id, meta_form_id, meta_form_name, enabled, last_test_lead_at, last_lead_received_at, created_at")
+      .select("id, source_type, meta_form_id, meta_form_name, website_url, enabled, last_test_lead_at, last_lead_received_at, created_at")
       .eq("project_id", projectId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false }),
@@ -63,7 +68,7 @@ export async function getMetaLeadSources(projectId: string): Promise<MetaLeadSou
 
   const lookupError = connectionResult.error ?? sourcesResult.error;
   if (lookupError) {
-    const unavailable = lookupError.code === "42P01" || /integration_connections|lead_sources/i.test(lookupError.message);
+    const unavailable = lookupError.code === "42P01" || lookupError.code === "42703" || /integration_connections|lead_sources/i.test(lookupError.message);
     if (!unavailable) console.error("Meta lead source lookup failed", lookupError);
     return { available: !unavailable, connection: null, sources: [] };
   }
@@ -86,6 +91,8 @@ export async function getMetaLeadSources(projectId: string): Promise<MetaLeadSou
       id: source.id,
       lastLeadReceivedAt: source.last_lead_received_at,
       lastTestLeadAt: source.last_test_lead_at,
+      sourceType: source.source_type,
+      websiteUrl: source.website_url,
     })),
   };
 }

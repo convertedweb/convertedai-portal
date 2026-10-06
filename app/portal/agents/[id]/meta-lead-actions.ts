@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { logAdminActivity } from "@/lib/activity-log";
 import { canManageProjects, getCurrentAdminAccess } from "@/lib/admin-permissions";
+import { normalizeWebsiteUrl } from "@/lib/lead-sources";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type MetaLeadSourceActionState = {
@@ -158,6 +159,47 @@ export async function createMetaLeadSource(_previousState: MetaLeadSourceActionS
   return { success: "Meta lead űrlap hozzáadva." };
 }
 
+export async function createWebsiteLeadSource(_previousState: MetaLeadSourceActionState, formData: FormData): Promise<MetaLeadSourceActionState> {
+  const projectId = requiredText(formData.get("projectId"));
+  const formName = requiredText(formData.get("websiteFormName"));
+  const websiteUrl = normalizeWebsiteUrl(requiredText(formData.get("websiteUrl")));
+
+  if (!projectId || !formName || !websiteUrl) {
+    return { error: "Add meg a weboldal űrlap nevét és egy érvényes oldal-URL-t (pl. https://pelda.hu/kapcsolat)." };
+  }
+
+  const writable = await getWritableMetaProject(projectId);
+  if ("error" in writable) return { error: writable.error };
+
+  const { error } = await writable.adminSupabase.from("lead_sources").insert({
+    enabled: true,
+    meta_form_name: formName.slice(0, 300),
+    organization_id: writable.project.organization_id,
+    project_id: projectId,
+    source_type: "website_form",
+    website_url: websiteUrl,
+  });
+
+  if (error) {
+    if (error.code === "23505") return { error: "Ez a weboldal űrlap már hozzá van rendelve ehhez a projekthez." };
+    console.error("Website lead source creation failed", error);
+    return { error: "Nem sikerült hozzáadni a weboldal űrlapot." };
+  }
+
+  await logAdminActivity({
+    actorUserId: writable.actorUserId,
+    description: formName,
+    eventType: "website_lead_source_created",
+    metadata: { websiteUrl },
+    organizationId: writable.project.organization_id,
+    projectId,
+    title: "Weboldal űrlap hozzáadva",
+  });
+
+  revalidateMetaProject(projectId);
+  return { success: "Weboldal űrlap hozzáadva." };
+}
+
 export async function setMetaLeadSourceEnabled(formData: FormData) {
   const projectId = requiredText(formData.get("projectId"));
   const sourceId = requiredText(formData.get("sourceId"));
@@ -172,18 +214,19 @@ export async function setMetaLeadSourceEnabled(formData: FormData) {
     .eq("organization_id", writable.project.organization_id)
     .eq("project_id", projectId)
     .is("deleted_at", null)
-    .select("id, meta_form_name")
+    .select("id, meta_form_name, source_type")
     .maybeSingle();
 
   if (error || !source) return;
+  const isWebsite = source.source_type === "website_form";
   await logAdminActivity({
     actorUserId: writable.actorUserId,
     description: source.meta_form_name,
-    eventType: enabled ? "meta_lead_source_enabled" : "meta_lead_source_disabled",
+    eventType: isWebsite ? (enabled ? "website_lead_source_enabled" : "website_lead_source_disabled") : enabled ? "meta_lead_source_enabled" : "meta_lead_source_disabled",
     metadata: { sourceId },
     organizationId: writable.project.organization_id,
     projectId,
-    title: enabled ? "Meta lead űrlap bekapcsolva" : "Meta lead űrlap szüneteltetve",
+    title: `${isWebsite ? "Weboldal űrlap" : "Meta lead űrlap"} ${enabled ? "bekapcsolva" : "szüneteltetve"}`,
   });
   revalidateMetaProject(projectId);
 }
@@ -201,18 +244,19 @@ export async function removeMetaLeadSource(formData: FormData) {
     .eq("organization_id", writable.project.organization_id)
     .eq("project_id", projectId)
     .is("deleted_at", null)
-    .select("id, meta_form_name")
+    .select("id, meta_form_name, source_type")
     .maybeSingle();
 
   if (error || !source) return;
+  const isWebsite = source.source_type === "website_form";
   await logAdminActivity({
     actorUserId: writable.actorUserId,
     description: source.meta_form_name,
-    eventType: "meta_lead_source_removed",
+    eventType: isWebsite ? "website_lead_source_removed" : "meta_lead_source_removed",
     metadata: { sourceId },
     organizationId: writable.project.organization_id,
     projectId,
-    title: "Meta lead űrlap leválasztva",
+    title: isWebsite ? "Weboldal űrlap leválasztva" : "Meta lead űrlap leválasztva",
   });
   revalidateMetaProject(projectId);
 }
