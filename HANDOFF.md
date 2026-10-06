@@ -7,6 +7,7 @@ A Meta lead hívó asszisztensek többűrlapos leadforrás-kezelésének külső
 ## Feladat projekt nélkül (2026-10-06)
 
 - Az admin feladatűrlap (`app/admin/tasks/new-task-form.tsx`) és a szerkesztő most **Ügyfél** (kötelező) + **Projekt** (opcionális, az ügyfél projektjeire szűrve, „Projekt nélkül” alapérték) mezőt használ. A szerver (`resolveTaskScope` az `actions.ts`-ben) újraellenőrzi az ügyfelet, a projekt-ügyfél egyezést és a `superadmin_only` szervezet láthatóságát. `getProjectManagementData` új `customers` listát ad; projekt nélküli feladat neve „Projekt nélkül”; az e-mail értesítés ilyenkor kihagyja a Projekt sort.
+- Az értesítésekből indított feladatűrlap (`app/admin/notifications/notification-task-form.tsx`) is megkapta az Ügyfél + opcionális Projekt mezőket (az ügyféllista a projektekből származik, így projekt nélküli ügyfél itt nem választható).
 - Új migráció, a felhasználó jóváhagyásával alkalmazva a `client-portal` projekten (`db query --linked -f` + `migration repair`; `project_id` `is_nullable = YES` visszaolvasva): `supabase/migrations/20261006120000_allow_tasks_without_project.sql` (`tasks.project_id` nullable).
 - Ellenőrzés: `npx tsc --noEmit --incremental false` sikeres. Böngészős teszt a migráció alkalmazása után szükséges (projekt nélküli létrehozás, szerkesztés projektre és vissza, szűrők).
 

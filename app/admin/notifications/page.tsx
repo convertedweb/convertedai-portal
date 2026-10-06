@@ -91,7 +91,7 @@ export default async function AdminNotificationsPage() {
                   defaultTitle={notification.title}
                   description={taskDescription}
                   notificationKey={notification.notificationKey}
-                  projects={projects.map((project) => ({ customerName: project.customerName, id: project.id, name: project.name }))}
+                  projects={projects.map((project) => ({ customerId: project.customerId, customerName: project.customerName, id: project.id, name: project.name }))}
                   taskCreated={taskMarkers.keys.has(notification.notificationKey) || taskMarkers.fingerprints.has(getNotificationTaskFingerprint(notification.title, taskDescription))}
                   users={assignableUsers}
                 />

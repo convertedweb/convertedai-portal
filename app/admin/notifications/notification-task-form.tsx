@@ -10,6 +10,7 @@ import type { AssignableAdminUser, TaskPriority } from "@/lib/project-management
 const initialState: TaskActionState = {};
 
 type NotificationProject = {
+  customerId: string;
   customerName: string;
   id: string;
   name: string;
@@ -35,6 +36,8 @@ export function NotificationTaskForm({
   users: AssignableAdminUser[];
 }) {
   const [open, setOpen] = useState(false);
+  const [customerId, setCustomerId] = useState(() => projects.find((project) => project.id === defaultProjectId)?.customerId ?? "");
+  const customers = Array.from(new Map(projects.map((project) => [project.customerId, project.customerName])).entries(), ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "hu"));
   const [state, action, pending] = useActionState(createTask, initialState);
 
   useEffect(() => {
@@ -59,7 +62,8 @@ export function NotificationTaskForm({
               <button aria-label="Bezárás" className="icon-button" onClick={() => setOpen(false)} type="button"><X size={17} /></button>
             </div>
             <label className="field"><span>Feladat neve</span><input defaultValue={defaultTitle} disabled={pending} maxLength={300} name="title" required /></label>
-            <label className="field"><span>Projekt</span><select defaultValue={defaultProjectId ?? ""} disabled={pending} name="projectId" required><option disabled value="">Válassz projektet</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.customerName} · {project.name}</option>)}</select></label>
+            <label className="field"><span>Ügyfél</span><select disabled={pending} name="customerId" onChange={(event) => setCustomerId(event.target.value)} required value={customerId}><option disabled value="">Válassz ügyfelet</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
+            <label className="field"><span>Projekt (opcionális)</span><select defaultValue={defaultProjectId ?? ""} disabled={pending || !customerId} key={customerId} name="projectId"><option value="">Projekt nélkül</option>{projects.filter((project) => project.customerId === customerId).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
             <label className="field"><span>Felelős</span><select defaultValue="" disabled={pending} name="assigneeUserId" required><option disabled value="">Válassz felelőst</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
             <div className="settings-form-grid">
               <label className="field"><span>Prioritás</span><select defaultValue={defaultPriority} disabled={pending} name="priority"><option value="low">Alacsony</option><option value="normal">Normál</option><option value="high">Magas</option><option value="urgent">Sürgős</option></select></label>
