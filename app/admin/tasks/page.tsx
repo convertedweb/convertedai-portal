@@ -35,7 +35,7 @@ export default async function AdminTasksPage({ searchParams }: { searchParams: P
   const params = await searchParams;
   const view = value(params.view) === "list" ? "list" : "kanban";
   const filterPanelOpen = value(params.filters) === "1";
-  const [{ access, projects, schemaReady, tasks }, assignableUsers] = await Promise.all([
+  const [{ access, customers: allCustomers, projects, schemaReady, tasks }, assignableUsers] = await Promise.all([
     getProjectManagementData(),
     getAssignableAdminUsers(),
   ]);
@@ -96,10 +96,7 @@ export default async function AdminTasksPage({ searchParams }: { searchParams: P
     return true;
   });
 
-  const customers = Array.from(
-    new Map(projects.map((project) => [project.organization_id, project.customerName])).entries(),
-    ([id, name]) => ({ id, name }),
-  ).sort((a, b) => a.name.localeCompare(b.name, "hu"));
+  const customers = allCustomers;
   const activeFilterCount = [query, projectId, customerId, status, priority, assignee, due, mine ? "mine" : ""].filter(Boolean).length;
 
   function viewHref(nextView: "kanban" | "list", showFilters = filterPanelOpen) {
@@ -125,7 +122,7 @@ export default async function AdminTasksPage({ searchParams }: { searchParams: P
           <h1>Feladatok</h1>
           <p className="intro-copy">Belső és ügyfélprojektek feladatai egy közös munkafelületen.</p>
         </div>
-        {schemaReady && <div className="task-page-actions"><Link aria-expanded={filterPanelOpen} aria-label={filterPanelOpen ? "Szűrők bezárása" : "Szűrők megnyitása"} className={`task-filter-toggle${filterPanelOpen ? " active" : ""}`} href={viewHref(view, !filterPanelOpen)} title="Szűrés"><Filter size={16} />{activeFilterCount > 0 && <span>{activeFilterCount}</span>}</Link><nav aria-label="Feladatnézet" className="task-view-switcher"><Link aria-current={view === "kanban" ? "page" : undefined} className={view === "kanban" ? "active" : ""} href={viewHref("kanban")}><Columns3 size={15} />Kanban</Link><Link aria-current={view === "list" ? "page" : undefined} className={view === "list" ? "active" : ""} href={viewHref("list")}><List size={15} />Lista</Link></nav><NewTaskForm allowSuperadminOnly={access.role === "superadmin"} assignableUsers={assignableUsers} currentUserId={access.user?.id ?? null} projects={projects} statusOptions={taskStatuses.map((id) => ({ id, label: taskStatusLabels[id] }))} /></div>}
+        {schemaReady && <div className="task-page-actions"><Link aria-expanded={filterPanelOpen} aria-label={filterPanelOpen ? "Szűrők bezárása" : "Szűrők megnyitása"} className={`task-filter-toggle${filterPanelOpen ? " active" : ""}`} href={viewHref(view, !filterPanelOpen)} title="Szűrés"><Filter size={16} />{activeFilterCount > 0 && <span>{activeFilterCount}</span>}</Link><nav aria-label="Feladatnézet" className="task-view-switcher"><Link aria-current={view === "kanban" ? "page" : undefined} className={view === "kanban" ? "active" : ""} href={viewHref("kanban")}><Columns3 size={15} />Kanban</Link><Link aria-current={view === "list" ? "page" : undefined} className={view === "list" ? "active" : ""} href={viewHref("list")}><List size={15} />Lista</Link></nav><NewTaskForm allowSuperadminOnly={access.role === "superadmin"} assignableUsers={assignableUsers} currentUserId={access.user?.id ?? null} customers={customers} projects={projects} statusOptions={taskStatuses.map((id) => ({ id, label: taskStatusLabels[id] }))} /></div>}
       </div>
 
       {schemaReady && filterPanelOpen && (

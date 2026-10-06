@@ -34,7 +34,29 @@ function parseVisibility(value: string): TaskVisibility | null {
   return value === "internal" || value === "client_visible" || value === "superadmin_only" ? value : null;
 }
 
+type TaskScope = { organizationId: string; project: { id: string; name: string } | null };
+
+async function resolveTaskScope(
+  adminSupabase: NonNullable<ReturnType<typeof createAdminClient>>,
+  role: "superadmin" | "admin",
+  customerId: string,
+  projectId: string,
+): Promise<TaskScope | { error: string }> {
+  let project: { id: string; name: string; organization_id: string } | null = null;
+  if (projectId) {
+    const { data } = await adminSupabase.from("projects").select("id, organization_id, name").eq("id", projectId).is("deleted_at", null).maybeSingle();
+    if (!data) return { error: "A kiválasztott projekt nem található." };
+    if (customerId && data.organization_id !== customerId) return { error: "A projekt nem a kiválasztott ügyfélhez tartozik." };
+    project = data;
+  }
+  const organizationId = project?.organization_id ?? customerId;
+  const { data: organization } = await adminSupabase.from("organizations").select("id, superadmin_only").eq("id", organizationId).is("deleted_at", null).maybeSingle();
+  if (!organization || (organization.superadmin_only && role !== "superadmin")) return { error: "A kiválasztott ügyfél nem található." };
+  return { organizationId, project: project ? { id: project.id, name: project.name } : null };
+}
+
 export async function createTask(_previousState: TaskActionState, formData: FormData): Promise<TaskActionState> {
+  const customerId = text(formData.get("customerId"));
   const projectId = text(formData.get("projectId"));
   const title = text(formData.get("title"));
   const description = text(formData.get("description"));
@@ -47,7 +69,7 @@ export async function createTask(_previousState: TaskActionState, formData: Form
   const initialStatusValue = text(formData.get("initialStatus")) || "backlog";
   const initialStatus = taskStatuses.find((status) => status === initialStatusValue) ?? null;
 
-  if (!projectId || !title || !priority) return { error: "A projekt, a cím és a prioritás kötelező." };
+  if ((!customerId && !projectId) || !title || !priority) return { error: "Az ügyfél, a cím és a prioritás kötelező." };
   if (title.length > 300) return { error: "A feladat címe legfeljebb 300 karakter lehet." };
   if (!visibility) return { error: "Érvénytelen láthatóság." };
   if (!initialStatus) return { error: "Érvénytelen kezdeti státusz." };
@@ -68,13 +90,9 @@ export async function createTask(_previousState: TaskActionState, formData: Form
     if (!adminRole && !superadmin) return { error: "A kiválasztott felelős nem admin felhasználó." };
   }
 
-  const { data: project } = await adminSupabase
-    .from("projects")
-    .select("id, organization_id, name")
-    .eq("id", projectId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!project) return { error: "A kiválasztott projekt nem található." };
+  const resolved = await resolveTaskScope(adminSupabase, access.role, customerId, projectId);
+  if ("error" in resolved) return { error: resolved.error };
+  const { organizationId, project } = resolved;
 
   const { data: task, error } = await adminSupabase.from("tasks").insert({
     assignee_user_id: assigneeUserId,
@@ -82,9 +100,9 @@ export async function createTask(_previousState: TaskActionState, formData: Form
     created_by: access.user.id,
     description,
     due_at: dueDate ? new Date(`${dueDate}T23:59:59`).toISOString() : null,
-    organization_id: project.organization_id,
+    organization_id: organizationId,
     priority,
-    project_id: project.id,
+    project_id: project?.id ?? null,
     start_date: startDate || null,
     status: initialStatus,
     title,
@@ -111,11 +129,11 @@ export async function createTask(_previousState: TaskActionState, formData: Form
       taskId: task.id,
       visibility,
     },
-    organizationId: project.organization_id,
-    projectId: project.id,
+    organizationId,
+    projectId: project?.id ?? null,
     title: "Feladat létrehozva",
   });
-  const { data: organization } = await adminSupabase.from("organizations").select("name, company_name").eq("id", project.organization_id).maybeSingle();
+  const { data: organization } = await adminSupabase.from("organizations").select("name, company_name").eq("id", organizationId).maybeSingle();
   await notifyTaskCreated({
     actor: {
       email: access.user.email,
@@ -129,7 +147,7 @@ export async function createTask(_previousState: TaskActionState, formData: Form
     description,
     dueDate: dueDate || null,
     priority,
-    projectName: project.name,
+    projectName: project?.name ?? null,
     status: initialStatus,
     taskId: task.id,
     title,
@@ -214,6 +232,7 @@ export async function moveTask(taskId: string, requestedStatus: string): Promise
 
 export async function updateTask(_previousState: TaskActionState, formData: FormData): Promise<TaskActionState> {
   const taskId = text(formData.get("taskId"));
+  const customerId = text(formData.get("customerId"));
   const projectId = text(formData.get("projectId"));
   const title = text(formData.get("title"));
   const description = text(formData.get("description"));
@@ -223,7 +242,7 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
   const dueDate = text(formData.get("dueDate"));
   const startDate = text(formData.get("startDate"));
 
-  if (!taskId || !projectId || !title || !status || !priority) return { error: "A projekt, a cím, a státusz és a prioritás kötelező." };
+  if (!taskId || (!customerId && !projectId) || !title || !status || !priority) return { error: "Az ügyfél, a cím, a státusz és a prioritás kötelező." };
   if (title.length > 300) return { error: "A feladat címe legfeljebb 300 karakter lehet." };
   if (description.length > 10000) return { error: "A leírás legfeljebb 10 000 karakter lehet." };
   if (!visibility) return { error: "Érvénytelen láthatóság." };
@@ -236,14 +255,13 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
   const adminSupabase = createAdminClient();
   if (!adminSupabase) return { error: "Hiányzik a Supabase szerveroldali kulcs." };
 
-  const [{ data: currentTask }, { data: project }] = await Promise.all([
-    adminSupabase.from("tasks").select("id, organization_id, project_id, source_ticket_id, title, description, status, priority, visibility, due_at, start_date").eq("id", taskId).is("deleted_at", null).maybeSingle(),
-    adminSupabase.from("projects").select("id, organization_id, name").eq("id", projectId).is("deleted_at", null).maybeSingle(),
-  ]);
+  const { data: currentTask } = await adminSupabase.from("tasks").select("id, organization_id, project_id, source_ticket_id, title, description, status, priority, visibility, due_at, start_date").eq("id", taskId).is("deleted_at", null).maybeSingle();
   if (!currentTask) return { error: "A feladat nem található." };
   if (currentTask.visibility === "superadmin_only" && access.role !== "superadmin") return { error: "A feladat nem található vagy nincs hozzá jogosultságod." };
-  if (!project) return { error: "A kiválasztott projekt nem található." };
-  if (currentTask.source_ticket_id && currentTask.organization_id !== project.organization_id) {
+  const resolved = await resolveTaskScope(adminSupabase, access.role, customerId, projectId);
+  if ("error" in resolved) return { error: resolved.error };
+  const { organizationId, project } = resolved;
+  if (currentTask.source_ticket_id && currentTask.organization_id !== organizationId) {
     return { error: "Ticketből készült feladat csak ugyanazon ügyfél projektjei között mozgatható." };
   }
 
@@ -252,9 +270,9 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
     completed_at: status === "done" ? new Date().toISOString() : null,
     description,
     due_at: nextDueAt,
-    organization_id: project.organization_id,
+    organization_id: organizationId,
     priority,
-    project_id: project.id,
+    project_id: project?.id ?? null,
     start_date: startDate || null,
     status,
     title,
@@ -267,7 +285,7 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
   }
 
   const changes: Record<string, { from: string | null; to: string | null }> = {};
-  if (currentTask.project_id !== project.id) changes.projectId = { from: currentTask.project_id, to: project.id };
+  if (currentTask.project_id !== (project?.id ?? null)) changes.projectId = { from: currentTask.project_id, to: project?.id ?? null };
   if (currentTask.title !== title) changes.title = { from: currentTask.title, to: title };
   if (currentTask.description !== description) changes.description = { from: currentTask.description, to: description };
   if (currentTask.status !== status) changes.status = { from: currentTask.status, to: status };

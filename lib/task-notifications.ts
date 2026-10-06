@@ -11,7 +11,7 @@ type TaskCreatedNotificationInput = {
   description?: string | null;
   dueDate?: string | null;
   priority: TaskPriority;
-  projectName: string;
+  projectName: string | null;
   status: Exclude<TaskStatus, "archived">;
   taskId: string;
   title: string;
@@ -40,7 +40,7 @@ export async function notifyTaskCreated(input: TaskCreatedNotificationInput) {
     const copy = buildBrandedEmail({
       actionLabel: "Új feladat jött létre",
       details: [
-        { label: "Projekt", value: input.projectName },
+        ...(input.projectName ? [{ label: "Projekt", value: input.projectName }] : []),
         ...(input.customerName ? [{ label: "Ügyfél", value: input.customerName }] : []),
         { label: "Státusz", value: taskStatusLabels[input.status] },
         { label: "Prioritás", value: taskPriorityLabels[input.priority] },

@@ -25,7 +25,8 @@ export const taskPriorityLabels: Record<TaskPriority, string> = {
 
 type TaskRow = {
   id: string;
-  project_id: string;
+  organization_id: string;
+  project_id: string | null;
   source_ticket_id: string | null;
   assignee_user_id: string | null;
   created_by: string | null;
@@ -50,6 +51,7 @@ type ProjectRow = {
 type OrganizationRow = { id: string; name: string; company_name: string | null; superadmin_only: boolean };
 
 export type ProjectManagementProject = ProjectRow & { customerName: string };
+export type ProjectManagementCustomer = { id: string; name: string };
 export type ProjectManagementTask = TaskRow & { customerName: string; organizationId: string; projectName: string };
 export type AssignableAdminUser = { email: string; id: string; name: string; role: "superadmin" | "admin" };
 export type TaskActivityItem = {
@@ -203,18 +205,18 @@ export async function getNotificationTaskMarkers(): Promise<{
 export async function getProjectManagementData() {
   const access = await getCurrentAdminAccess();
   if (!access.user || !access.role) {
-    return { access, projects: [] as ProjectManagementProject[], schemaReady: true, tasks: [] as ProjectManagementTask[] };
+    return { access, customers: [] as ProjectManagementCustomer[], projects: [] as ProjectManagementProject[], schemaReady: true, tasks: [] as ProjectManagementTask[] };
   }
 
   const adminSupabase = createAdminClient();
   if (!adminSupabase) {
-    return { access, projects: [] as ProjectManagementProject[], schemaReady: false, tasks: [] as ProjectManagementTask[] };
+    return { access, customers: [] as ProjectManagementCustomer[], projects: [] as ProjectManagementProject[], schemaReady: false, tasks: [] as ProjectManagementTask[] };
   }
 
   const [tasksResult, projectsResult, organizationsResult] = await Promise.all([
     adminSupabase
       .from("tasks")
-      .select("id, project_id, source_ticket_id, assignee_user_id, created_by, title, description, status, priority, visibility, due_at, start_date, created_at")
+      .select("id, organization_id, project_id, source_ticket_id, assignee_user_id, created_by, title, description, status, priority, visibility, due_at, start_date, created_at")
       .is("deleted_at", null)
       .neq("status", "archived")
       .order("sort_order", { ascending: true })
@@ -229,7 +231,7 @@ export async function getProjectManagementData() {
 
   if (tasksResult.error || projectsResult.error) {
     console.error("Project management schema is not ready", tasksResult.error ?? projectsResult.error);
-    return { access, projects: [] as ProjectManagementProject[], schemaReady: false, tasks: [] as ProjectManagementTask[] };
+    return { access, customers: [] as ProjectManagementCustomer[], projects: [] as ProjectManagementProject[], schemaReady: false, tasks: [] as ProjectManagementTask[] };
   }
 
   const organizationRows = (organizationsResult.data ?? []) as OrganizationRow[];
@@ -242,15 +244,23 @@ export async function getProjectManagementData() {
   }));
   const projectsById = new Map(projects.map((project) => [project.id, project]));
 
-  const tasks = ((tasksResult.data ?? []) as TaskRow[]).filter((task) => projectsById.has(task.project_id)).map((task) => ({
-    ...task,
-    customerName: projectsById.get(task.project_id)?.customerName ?? "Ismeretlen ügyfél",
-    organizationId: projectsById.get(task.project_id)?.organization_id ?? "",
-    projectName: projectsById.get(task.project_id)?.name ?? "Ismeretlen projekt",
-  }));
+  const customers: ProjectManagementCustomer[] = visibleOrganizationRows
+    .map((organization) => ({ id: organization.id, name: organization.company_name ?? organization.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "hu"));
+
+  const tasks = ((tasksResult.data ?? []) as TaskRow[]).filter((task) => visibleOrganizationIds.has(task.organization_id)).map((task) => {
+    const project = task.project_id ? projectsById.get(task.project_id) : null;
+    return {
+      ...task,
+      customerName: organizations.get(task.organization_id) ?? "Ismeretlen ügyfél",
+      organizationId: task.organization_id,
+      projectName: project?.name ?? (task.project_id ? "Ismeretlen projekt" : "Projekt nélkül"),
+    };
+  });
 
   return {
     access,
+    customers,
     projects,
     schemaReady: true,
     tasks: access.role === "superadmin" ? tasks : tasks.filter((task) => task.visibility !== "superadmin_only"),

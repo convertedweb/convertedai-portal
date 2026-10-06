@@ -1,24 +1,26 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { FormDatePicker } from "@/app/form-date-picker";
 import { getTodayDateInputValue } from "@/lib/date-input";
-import type { AssignableAdminUser, ProjectManagementProject } from "@/lib/project-management";
+import type { AssignableAdminUser, ProjectManagementCustomer, ProjectManagementProject } from "@/lib/project-management";
 import { createTask, type TaskActionState } from "./actions";
 
 const initialState: TaskActionState = {};
 
-export function NewTaskForm({ allowSuperadminOnly, assignableUsers, currentUserId, projects, statusOptions }: { allowSuperadminOnly: boolean; assignableUsers: AssignableAdminUser[]; currentUserId: string | null; projects: ProjectManagementProject[]; statusOptions: { id: string; label: string }[] }) {
+export function NewTaskForm({ allowSuperadminOnly, assignableUsers, currentUserId, customers, projects, statusOptions }: { allowSuperadminOnly: boolean; assignableUsers: AssignableAdminUser[]; currentUserId: string | null; customers: ProjectManagementCustomer[]; projects: ProjectManagementProject[]; statusOptions: { id: string; label: string }[] }) {
   const [state, action, pending] = useActionState(createTask, initialState);
   const formRef = useRef<HTMLFormElement>(null);
-  useEffect(() => { if (state.success) formRef.current?.reset(); }, [state.success]);
+  const [customerId, setCustomerId] = useState("");
+  useEffect(() => { if (state.success) { formRef.current?.reset(); setCustomerId(""); } }, [state.success]);
 
   return (
     <details className="new-task-panel">
       <summary className="button"><Plus size={16} /> Új feladat</summary>
       <form action={action} className="new-task-form" ref={formRef}>
-        <label className="field"><span>Projekt</span><select disabled={pending} name="projectId" required defaultValue=""><option disabled value="">Válassz projektet</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.customerName} · {project.name}</option>)}</select></label>
+        <label className="field"><span>Ügyfél</span><select disabled={pending} name="customerId" onChange={(event) => setCustomerId(event.target.value)} required value={customerId}><option disabled value="">Válassz ügyfelet</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
+        <label className="field"><span>Projekt (opcionális)</span><select disabled={pending || !customerId} key={customerId} name="projectId" defaultValue=""><option value="">Projekt nélkül</option>{projects.filter((project) => project.organization_id === customerId).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
         <label className="field"><span>Feladat címe</span><input disabled={pending} maxLength={300} name="title" required /></label>
         <label className="field new-task-description"><span>Leírás</span><textarea disabled={pending} name="description" rows={3} /></label>
         <label className="field"><span>Felelős</span><select disabled={pending} name="assigneeUserId" defaultValue={assignableUsers.some((user) => user.id === currentUserId) ? currentUserId ?? "" : ""}><option value="">Nincs felelős</option>{assignableUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
