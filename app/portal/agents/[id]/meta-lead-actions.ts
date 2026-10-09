@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { logAdminActivity } from "@/lib/activity-log";
 import { canManageProjects, getCurrentAdminAccess } from "@/lib/admin-permissions";
+import { normalizeBusinessHours, parseNotifyEmailsInput, weekdayKeys } from "@/lib/lead-call";
 import { normalizeWebsiteUrl } from "@/lib/lead-sources";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -259,4 +260,109 @@ export async function removeMetaLeadSource(formData: FormData) {
     title: isWebsite ? "Weboldal űrlap leválasztva" : "Meta lead űrlap leválasztva",
   });
   revalidateMetaProject(projectId);
+}
+
+function optionalText(formData: FormData, name: string, maxLength: number) {
+  const value = requiredText(formData.get(name));
+  return value.length > maxLength ? null : value || undefined;
+}
+
+export async function saveLeadCallSettings(_previousState: MetaLeadSourceActionState, formData: FormData): Promise<MetaLeadSourceActionState> {
+  const projectId = requiredText(formData.get("projectId"));
+  const writable = await getWritableMetaProject(projectId);
+  if ("error" in writable) return { error: writable.error };
+
+  const texts = {
+    calendar_id: optionalText(formData, "calendarId", 300),
+    company_display_name: optionalText(formData, "companyDisplayName", 200),
+    expert_name: optionalText(formData, "expertName", 200),
+    expert_title: optionalText(formData, "expertTitle", 200),
+    meeting_link: optionalText(formData, "meetingLink", 500),
+  };
+  if (Object.values(texts).some((value) => value === null)) return { error: "Valamelyik mező túl hosszú." };
+
+  const meetingLink = texts.meeting_link;
+  if (meetingLink) {
+    let valid = false;
+    try {
+      valid = new URL(meetingLink).protocol === "https:" && meetingLink.length >= 8;
+    } catch {
+      valid = false;
+    }
+    if (!valid) return { error: "A megbeszélési link legyen érvényes https:// cím." };
+  }
+
+  const { emails, invalid } = parseNotifyEmailsInput(requiredText(formData.get("notifyEmails")));
+  if (invalid.length > 0) return { error: `Érvénytelen e-mail cím: ${invalid[0]}` };
+  if (emails.length > 10) return { error: "Legfeljebb 10 értesítési e-mail cím adható meg." };
+
+  const days: Record<string, { end: string; start: string }[]> = {};
+  for (const day of weekdayKeys) {
+    days[day] = formData.get(`hours_${day}_on`)
+      ? [{ end: requiredText(formData.get(`hours_${day}_end`)), start: requiredText(formData.get(`hours_${day}_start`)) }]
+      : [];
+  }
+  const businessHours = normalizeBusinessHours({ days, timezone: "Europe/Budapest" });
+  if (!businessHours) return { error: "A nyitvatartásnál a kezdő időpont legyen korábbi a végénél (ÓÓ:PP)." };
+
+  const enabled = formData.get("enabled") === "on";
+  const { error } = await writable.adminSupabase.from("lead_call_settings").upsert(
+    {
+      ...Object.fromEntries(Object.entries(texts).map(([key, value]) => [key, value ?? null])),
+      business_hours: businessHours,
+      enabled,
+      notify_emails: emails,
+      organization_id: writable.project.organization_id,
+      project_id: projectId,
+    },
+    { onConflict: "project_id" },
+  );
+  if (error) {
+    console.error("Lead call settings save failed", error);
+    return { error: "Nem sikerült menteni a Lead Call beállításokat." };
+  }
+
+  await logAdminActivity({
+    actorUserId: writable.actorUserId,
+    description: enabled ? "Bekapcsolva" : "Kikapcsolva",
+    eventType: "lead_call_settings_updated",
+    metadata: { enabled },
+    organizationId: writable.project.organization_id,
+    projectId,
+    title: "Lead Call beállítások frissítve",
+  });
+  revalidateMetaProject(projectId);
+  return { success: "Lead Call beállítások mentve." };
+}
+
+export async function saveLeadSourceCampaignTopic(_previousState: MetaLeadSourceActionState, formData: FormData): Promise<MetaLeadSourceActionState> {
+  const projectId = requiredText(formData.get("projectId"));
+  const sourceId = requiredText(formData.get("sourceId"));
+  const topic = requiredText(formData.get("campaignTopic"));
+  if (!sourceId || topic.length > 200) return { error: "A kampány-téma legfeljebb 200 karakter lehet." };
+
+  const writable = await getWritableMetaProject(projectId);
+  if ("error" in writable) return { error: writable.error };
+
+  const { data, error } = await writable.adminSupabase
+    .from("lead_sources")
+    .update({ campaign_topic: topic || null })
+    .eq("id", sourceId)
+    .eq("project_id", projectId)
+    .eq("organization_id", writable.project.organization_id)
+    .is("deleted_at", null)
+    .select("id");
+  if (error || !data?.length) return { error: "Nem sikerült menteni a kampány-témát." };
+
+  await logAdminActivity({
+    actorUserId: writable.actorUserId,
+    description: topic || "Törölve",
+    eventType: "lead_source_campaign_topic_updated",
+    metadata: { sourceId },
+    organizationId: writable.project.organization_id,
+    projectId,
+    title: "Kampány-téma frissítve",
+  });
+  revalidateMetaProject(projectId);
+  return { success: "Kampány-téma mentve." };
 }
