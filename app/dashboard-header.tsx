@@ -3,12 +3,14 @@ import Link from "next/link";
 import { ThemeToggle } from "@/app/theme-toggle";
 
 export function DashboardHeader({
+  children,
   label,
   notificationCount,
   notificationHref,
   settingsHref,
   signOutNext,
 }: {
+  children?: React.ReactNode;
   label: string;
   notificationCount: number;
   notificationHref: string;
@@ -22,6 +24,7 @@ export function DashboardHeader({
         <strong>{label}</strong>
       </div>
       <div className="dashboard-header-actions">
+        {children}
         <ThemeToggle />
         <Link
           aria-label={`Értesítések: ${notificationCount} db`}

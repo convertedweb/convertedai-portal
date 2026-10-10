@@ -2,6 +2,7 @@ import { CalendarDays, CirclePause, Columns3, Filter, List, Search, UserRoundChe
 import Link from "next/link";
 import { getAdminRoleLabel } from "@/lib/admin-permissions";
 import { getAssignableAdminUsers, getProjectManagementData, taskPriorityLabels, taskStatuses, taskStatusLabels, type TaskPriority, type TaskStatus } from "@/lib/project-management";
+import { CustomerProjectFilter } from "../customer-project-filter";
 import { KanbanBoard } from "./kanban-board";
 import { NewTaskForm } from "./new-task-form";
 import { TaskCalendar } from "./task-calendar";
@@ -135,8 +136,7 @@ export default async function AdminTasksPage({ searchParams }: { searchParams: P
             <input defaultValue={query} name="q" placeholder="Keresés feladatban, projektben vagy ügyfélben…" type="search" />
           </div>
           <div className="task-filter-grid">
-            <label><span>Ügyfél</span><select defaultValue={customerId} name="customer"><option value="">Minden ügyfél</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
-            <label><span>Projekt</span><select defaultValue={projectId} name="project"><option value="">Minden projekt</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.customerName} · {project.name}</option>)}</select></label>
+            <CustomerProjectFilter customers={customers.map((customer) => ({ id: customer.id, name: customer.name }))} defaultCustomer={customerId} defaultProject={projectId} labeled projects={projects.map((project) => ({ customerId: project.organization_id, id: project.id, name: project.name }))} />
             <label><span>Státusz</span><select defaultValue={status} name="status"><option value="">Minden státusz</option>{taskStatuses.map((option) => <option key={option} value={option}>{taskStatusLabels[option]}</option>)}</select></label>
             <label><span>Prioritás</span><select defaultValue={priority} name="priority"><option value="">Minden prioritás</option>{Object.entries(taskPriorityLabels).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
             <label><span>Felelős</span><select defaultValue={assignee} name="assignee"><option value="">Minden felelős</option>{assignableUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
