@@ -10,6 +10,7 @@ const visibilityLabels: Record<string, string> = {
 };
 
 const fieldLabels: Record<string, string> = {
+  assigneeUserId: "Felelős",
   description: "Leírás",
   dueAt: "Határidő",
   priority: "Prioritás",
@@ -52,6 +53,7 @@ function getChangeLines(activity: TaskActivityItem) {
   return Object.entries(changes as Record<string, Change>).map(([field, change]) => {
     if (field === "description") return "Leírás módosítva";
     if (field === "projectId") return "Projekt módosítva";
+    if (field === "assigneeUserId") return "Felelős módosítva";
     return `${fieldLabels[field] ?? field}: ${formatValue(field, change.from)} → ${formatValue(field, change.to)}`;
   });
 }
