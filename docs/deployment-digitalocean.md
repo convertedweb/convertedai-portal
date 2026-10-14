@@ -102,16 +102,25 @@ Verify `curl --fail https://portal.convertedweb.com/api/health`, then test porta
 
 ## Deploying a new version
 
-Push to `master`. GitHub Actions builds and publishes both `latest` and the commit-tagged image. On the Droplet:
+Push to `master`. The `container` job builds and publishes `latest` and the commit-tagged image; the `deploy` job then connects to the Droplet over SSH and runs `deploy/deploy.sh` with the full commit SHA. The script writes `PORTAL_IMAGE_TAG` to `.env`, runs `pull` and `up -d --wait`, checks `http://127.0.0.1:3000/api/health` and rolls back to the previous tag if anything fails. The workflow then checks the public health URL. Without the secrets below the deploy step is skipped and the manual procedure still works.
+
+### One-time setup
+
+1. On the Droplet: copy `deploy/deploy.sh` to `/opt/convertedai-portal/deploy.sh` and `chmod 755` it. The deploy user needs Docker access.
+2. On your Mac create a dedicated key: `ssh-keygen -t ed25519 -f ~/deploy_key -N "" -C github-deploy`.
+3. Append to the deploy user's `~/.ssh/authorized_keys` on the Droplet (one line, restricted to the script):
+   `command="/opt/convertedai-portal/deploy.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA... github-deploy`
+4. GitHub repository Settings > Secrets and variables > Actions > Secrets: `DEPLOY_HOST` (Droplet IP or host), `DEPLOY_USER`, `DEPLOY_SSH_KEY` (the private key file contents), `DEPLOY_KNOWN_HOSTS` (output of `ssh-keyscan -t ed25519 <host>`; verify the fingerprint).
+5. Delete the local private key after storing it as a secret.
+
+### Manual deploy and rollback
 
 ```bash
 cd /opt/convertedai-portal
-export PORTAL_IMAGE_TAG=REPLACE_WITH_SUCCESSFUL_FULL_COMMIT_SHA
-docker compose -f docker-compose.production.yml pull
-docker compose -f docker-compose.production.yml up -d --wait
+./deploy.sh REPLACE_WITH_SUCCESSFUL_FULL_COMMIT_SHA
 ```
 
-Record the previous tag before updating. To roll back, select that tag and repeat these commands. Persist the selected `PORTAL_IMAGE_TAG` in `/opt/convertedai-portal/.env` for subsequent commands; shell exports take precedence. Retain previous images until validation finishes.
+To roll back, run it with the previous full SHA. Database migrations are not part of the pipeline; apply them separately before deploying code that needs them. Retain previous images until validation finishes.
 
 The `portal` container is limited to 1 GB RAM and 1.5 CPU cores. These are caps, not resource reservations for n8n. Temporary files and the Next.js cache use writable memory mounts; the rest of the container is read-only.
 

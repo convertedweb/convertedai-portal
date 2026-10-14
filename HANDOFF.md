@@ -28,6 +28,11 @@ A Meta lead hívó asszisztensek többűrlapos leadforrás-kezelésének külső
 
 - Deploy (2026-10-10): a feladatkezelő/időnyilvántartás csomag (`114b76b` + a következő commit) a `master`-re pusholva; a felhasználó kérésére a `tests/timesheet.test.ts` **nincs commitolva** (helyben létezik, 16/16 sikeres), a deploy előtt tesztfuttatás nem történt. Adatot nem másoltunk, éles adatbázis-módosítás nem volt (a `task_time_entries` migráció korábban alkalmazva). A helyi tesztadatok sorsáról a felhasználó még nem nyilatkozott; tesztadat-takarítás csak kifejezett jóváhagyással.
 
+## Automatikus deploy (2026-10-14)
+
+- A `.github/workflows/container.yml` új `deploy` jobja a build után SSH-val meghívja a droplet `deploy.sh`-ját a teljes commit SHA-val (`deploy/deploy.sh`: `.env` tag írása, `pull`, `up -d --wait`, health check, hibánál visszaállás az előző tagre; `flock` védi a párhuzamos futást). Secretek nélkül a lépés kimarad. Beállítási lépések: `docs/deployment-digitalocean.md`.
+- **Még nincs beállítva** a droplet és a GitHub secretek (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`), a szkript élesben nem futott; helyben csak `bash -n` és stubolt teszt. Az első automatikus deploy előtt kézzel próbáld ki a droplet-en. Nincs commitolva.
+
 ## Ügyfél tagok limitje (2026-10-14)
 
 - Szabály: ügyfelenként 1 tulajdonos (`client_owner`) és legfeljebb 2 munkatárs (`client_member`). Jelenlegi adatok megfelelnek (Dr Szeiler: 1+2).
