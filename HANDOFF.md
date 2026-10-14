@@ -28,6 +28,11 @@ A Meta lead hívó asszisztensek többűrlapos leadforrás-kezelésének külső
 
 - Deploy (2026-10-10): a feladatkezelő/időnyilvántartás csomag (`114b76b` + a következő commit) a `master`-re pusholva; a felhasználó kérésére a `tests/timesheet.test.ts` **nincs commitolva** (helyben létezik, 16/16 sikeres), a deploy előtt tesztfuttatás nem történt. Adatot nem másoltunk, éles adatbázis-módosítás nem volt (a `task_time_entries` migráció korábban alkalmazva). A helyi tesztadatok sorsáról a felhasználó még nem nyilatkozott; tesztadat-takarítás csak kifejezett jóváhagyással.
 
+## Login: nincs önregisztráció (2026-10-14)
+
+- A `/login` `signInWithOtp` hívása `shouldCreateUser` nélkül önregisztrációt engedett (`konyveles@drszeiler.hu` így jött létre 2026-10-12-én, szerepkör és szervezet nélkül, adathoz nincs hozzáférése; a fiókot nem töröltük). Javítva: `shouldCreateUser: false` és magyar hibaüzenet ismeretlen címre (`app/login/page.tsx`). Nincs commitolva/deployolva.
+- Teendő a felhasználónak: Supabase dashboard → Authentication → „Allow new users to sign up" kikapcsolása (a publishable kulcs publikus, az API közvetlenül is hívható).
+
 ## Feladat projekt nélkül (2026-10-06)
 
 - Az admin feladatűrlap (`app/admin/tasks/new-task-form.tsx`) és a szerkesztő most **Ügyfél** (kötelező) + **Projekt** (opcionális, az ügyfél projektjeire szűrve, „Projekt nélkül” alapérték) mezőt használ. A szerver (`resolveTaskScope` az `actions.ts`-ben) újraellenőrzi az ügyfelet, a projekt-ügyfél egyezést és a `superadmin_only` szervezet láthatóságát. `getProjectManagementData` új `customers` listát ad; projekt nélküli feladat neve „Projekt nélkül”; az e-mail értesítés ilyenkor kihagyja a Projekt sort.
