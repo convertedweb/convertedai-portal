@@ -28,6 +28,12 @@ A Meta lead hívó asszisztensek többűrlapos leadforrás-kezelésének külső
 
 - Deploy (2026-10-10): a feladatkezelő/időnyilvántartás csomag (`114b76b` + a következő commit) a `master`-re pusholva; a felhasználó kérésére a `tests/timesheet.test.ts` **nincs commitolva** (helyben létezik, 16/16 sikeres), a deploy előtt tesztfuttatás nem történt. Adatot nem másoltunk, éles adatbázis-módosítás nem volt (a `task_time_entries` migráció korábban alkalmazva). A helyi tesztadatok sorsáról a felhasználó még nem nyilatkozott; tesztadat-takarítás csak kifejezett jóváhagyással.
 
+## Ügyfél tagok limitje (2026-10-14)
+
+- Szabály: ügyfelenként 1 tulajdonos (`client_owner`) és legfeljebb 2 munkatárs (`client_member`). Jelenlegi adatok megfelelnek (Dr Szeiler: 1+2).
+- Új migráció, a felhasználó jóváhagyásával alkalmazva a `client-portal` projekten (`db query --linked -f` + `migration repair`; trigger és index visszaolvasva, a limit visszagörgetett tranzakcióban tesztelve): `supabase/migrations/20261014120000_limit_org_members.sql` (egyedi részleges index a tulajdonosra + `org_members_enforce_limit` trigger, amely zárolja az ügyfél sorát és `org_member_limit` hibát dob).
+- Kód: `lib/org-member-limits.ts` (meghívás előtti érthető hiba), bekötve az `app/admin/customers/[id]/edit/actions.ts` és `app/admin/users/new/actions.ts` meghívó actionjeibe; a trigger hibáját is magyar üzenetre fordítják. `tsc` sikeres. Nincs commitolva.
+
 ## Login: nincs önregisztráció (2026-10-14)
 
 - A `/login` `signInWithOtp` hívása `shouldCreateUser` nélkül önregisztrációt engedett (`konyveles@drszeiler.hu` így jött létre 2026-10-12-én, szerepkör és szervezet nélkül, adathoz nincs hozzáférése; a fiókot nem töröltük). Javítva: `shouldCreateUser: false` és magyar hibaüzenet ismeretlen címre (`app/login/page.tsx`). Nincs commitolva/deployolva.
