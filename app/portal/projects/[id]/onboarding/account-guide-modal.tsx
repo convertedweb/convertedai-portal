@@ -29,10 +29,10 @@ export function AccountGuideModal({ guide, name, onClose }: { guide: Guide; name
           <div><span>{name} útmutató</span><h3 id="guide-title">{index + 1}. {step.title}</h3></div>
           <button aria-label="Bezárás" className="icon-button" onClick={onClose} type="button"><X size={16} /></button>
         </div>
-        {failedImages.includes(step.image)
+        {step.image && (failedImages.includes(step.image)
           ? <div className="guide-image guide-placeholder"><ImageOff size={22} /><span>A képernyőkép még nincs feltöltve</span></div>
           // eslint-disable-next-line @next/next/no-img-element
-          : <img alt={`${step.title} – képernyőkép`} className="guide-image" onError={() => setFailedImages((current) => [...current, step.image])} src={step.image} />}
+          : <img alt={`${step.title} – képernyőkép`} className="guide-image" onError={() => setFailedImages((current) => [...current, step.image as string])} src={step.image} />)}
         <p>{step.link && step.text.includes(step.link.label)
           ? <>{step.text.split(step.link.label)[0]}<a href={step.link.href} rel="noopener noreferrer" target="_blank">{step.link.label}</a>{step.text.split(step.link.label).slice(1).join(step.link.label)}</>
           : step.text}</p>

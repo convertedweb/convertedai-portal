@@ -19,7 +19,7 @@ import { StepArt } from "./step-art";
 type AccountItem = OnboardingAccount & { done: boolean; details: OnboardingAccountDetails | null };
 
 const stepMeta = [
-  { title: "Fiókok létrehozása", description: "Hozd létre azokat a szolgáltatói fiókokat, amelyeket a projekthez használunk." },
+  { title: "Fiókok létrehozása", description: "Hozd létre azokat a szolgáltatói fiókokat, amelyeket a projekthez használunk. Nézd meg az útmutató segédletet a fiók létrehozáshoz." },
   { title: "Asszisztens beállítások", description: "Add meg az asszisztens nevét, köszöntését és a híváskezelési szabályokat." },
   { title: "Tudásbázis feltöltés", description: "Töltsd fel azokat a dokumentumokat, amelyekből az asszisztens a válaszait adja." },
   { title: "Telefonszám", description: "Válaszd ki, milyen számot rendeljünk, és töltsd fel a számhoz szükséges dokumentumokat." },
@@ -176,7 +176,7 @@ export function OnboardingFlow({ accounts, accountsSavable, assistantFields, kno
           </div>
 
           {step === 0 && (
-            <div className="onboarding-account-grid">
+            <div className={`onboarding-account-grid ${accounts.length === 1 ? "single" : ""}`}>
               {accounts.length === 0 && <p className="onboarding-hint">Ehhez a projekthez nem kell külön fiókot létrehoznod.</p>}
               {accounts.map((account) => (
                 <div className={`onboarding-account-card ${account.done ? "done" : ""}`} key={account.key}>

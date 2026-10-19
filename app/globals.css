@@ -2479,3 +2479,6 @@ button.task-calendar-more:hover { color: var(--teal); }
 .onboarding-compact .field-label { align-items: center; display: inline-flex; gap: 7px; }
 .onboarding-compact .field-label svg { color: var(--color-hex-9ba7ff); flex: 0 0 auto; }
 :root[data-theme="light"] .onboarding-compact .field-label svg { color: var(--color-hex-3947b8); }
+/* Egyetlen fiók esetén a kártya a rács szélességének pontosan fele. */
+.onboarding-account-grid.single { grid-template-columns: minmax(0, 50%); }
+@media (max-width: 520px) { .onboarding-account-grid.single { grid-template-columns: minmax(0, 1fr); } }

@@ -58,12 +58,17 @@ test("onetimesecret links accept only https onetimesecret.com hosts", async () =
   assert.equal(isValidAccountEmail("ugyfel@ceg.hu"), true);
   assert.equal(isValidAccountEmail("nem-email"), false);
   // az általános útmutató négy lépés (3.: onetimesecret, 4.: adatok megadása); az ElevenLabsé egyedi, képernyőkhöz kötött
-  const generic = onboardingAccountCatalog.filter((account) => account.key !== "elevenlabs");
+  const generic = onboardingAccountCatalog.filter((account) => account.key !== "elevenlabs" && account.key !== "google_workspace");
   assert.ok(generic.every((account) => account.guide?.steps.length === 4 && account.guide.steps[2].title.toLowerCase().includes("onetimesecret") && account.guide.steps[3].title === "Adatok megadása"));
   const elevenlabs = onboardingAccountCatalog.find((account) => account.key === "elevenlabs");
   assert.equal(elevenlabs?.guide?.steps.length, 11);
-  assert.ok(elevenlabs?.guide?.steps.every((step) => step.image.startsWith("/onboarding/elevenlabs/elevenlabs_") && step.image.endsWith(".webp")));
+  assert.ok(elevenlabs?.guide?.steps.every((step) => step.image?.startsWith("/onboarding/elevenlabs/elevenlabs_") && step.image.endsWith(".webp")));
   assert.ok(elevenlabs?.guide?.steps.every((step) => !step.link || step.text.includes(step.link.label)));
+  const google = onboardingAccountCatalog.find((account) => account.key === "google_workspace");
+  assert.equal(google?.guide?.steps.length, 3);
+  assert.equal(google?.guide?.steps[0].image, undefined); // a fiók létrehozásához nincs kép
+  assert.deepEqual(google?.guide?.steps.slice(1).map((step) => step.image), ["/onboarding/google/google_01.webp", "/onboarding/google/google_02.webp"]);
+  assert.ok(google?.guide?.steps.every((step) => !step.link || step.text.includes(step.link.label)));
 });
 
 test("required onboarding state needs accounts, assistant settings and knowledge", () => {

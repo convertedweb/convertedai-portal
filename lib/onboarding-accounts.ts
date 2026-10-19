@@ -1,7 +1,7 @@
 export type OnboardingAccountKey = "elevenlabs" | "telnyx" | "zadarma" | "n8n" | "google_workspace" | "meta_business" | "whatsapp" | "cal_com";
 
 // A text-ben szereplő link.label kattintható linkként jelenik meg.
-export type OnboardingGuideStep = { title: string; text: string; image: string; link?: { label: string; href: string } };
+export type OnboardingGuideStep = { title: string; text: string; image?: string; link?: { label: string; href: string } };
 
 export type OnboardingAccountDetails = { email: string; secretUrl: string };
 
@@ -40,7 +40,15 @@ const rawCatalog: OnboardingAccount[] = [
   { key: "telnyx", name: "Telnyx", description: "Telefonszám és hívásforgalom szolgáltató.", signupUrl: "https://telnyx.com/sign-up", logo: "/brands/telnyx.png", logoBg: "#00e6af", mark: "T", color: "#00c08b" },
   { key: "zadarma", name: "Zadarma", description: "Alternatív telefonszám és hívásforgalom szolgáltató.", signupUrl: "https://zadarma.com/hu/", logo: "/brands/zadarma.png", mark: "Z", color: "#e8590c" },
   { key: "n8n", name: "n8n", description: "Az automatizációk és integrációk futtatója.", signupUrl: "https://app.n8n.cloud/register", logo: "/brands/n8n.svg", mark: "n8n", color: "#ea4b71" },
-  { key: "google_workspace", name: "Google Workspace", description: "Naptár és email az időpontfoglaláshoz.", signupUrl: "https://workspace.google.com/", logo: "/brands/google-workspace.png", mark: "G", color: "#4285f4" },
+  { key: "google_workspace", name: "Google Workspace", description: "Email küldéshez, adat mentéshez és időpontfoglaláshoz.", signupUrl: "https://workspace.google.com/", logo: "/brands/google-workspace.png", mark: "G", color: "#4285f4",
+    // Egyedi útmutató: a fiók létrehozásához nincs képernyőkép, a jelszó-átadás képei a public/onboarding/google/ mappában vannak.
+    guide: {
+      steps: [
+        { title: "Új Google fiók létrehozása", text: "A Google fiókot e-mail küldéshez, adatmentéshez és időpontfoglaláshoz használjuk. Hozz létre egy új Google fiókot (accounts.google.com/signup), vagy egy új Workspace felhasználót, amelyet csak ehhez a projekthez használunk. A következő lépésben küldd el nekünk a fiók jelszavát.", link: { label: "accounts.google.com/signup", href: "https://accounts.google.com/signup" } },
+        { title: "Jelszó átadása onetimesecret linkkel", text: "Nyisd meg a onetimesecret.com oldalt. A piros keretes mezőbe írd be a Google fiókod jelszavát, majd kattints a „Create Link” gombra.", image: "/onboarding/google/google_01.webp", link: { label: "onetimesecret.com", href: "https://onetimesecret.com" } },
+        { title: "Link másolása és adatok megadása", text: "A „Success!” üzenet után a „Copy” gombbal másold ki a létrejött linket (https://…onetimesecret.com/secret/…). Ez a link csak egyszer nyitható meg. Zárd be az útmutatót, és az onboarding oldalon a Google Workspace kártyán add meg a Google fiók e-mail címét és ezt a linket, majd kattints az „Elkészült” gombra.", image: "/onboarding/google/google_02.webp" },
+      ],
+    } },
   { key: "meta_business", name: "Meta Business", description: "Facebook-oldal és lead űrlapok kezelése.", signupUrl: "https://business.facebook.com/", mark: "M", color: "#0866ff" },
   { key: "whatsapp", name: "WhatsApp Business", description: "Üzenetküldés WhatsApp csatornán.", signupUrl: "https://business.whatsapp.com/", mark: "W", color: "#25d366" },
   { key: "cal_com", name: "Cal.com", description: "Időpontfoglaló rendszer.", signupUrl: "https://cal.com/signup", mark: "Cal", color: "#111827" },
