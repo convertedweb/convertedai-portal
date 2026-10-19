@@ -22,7 +22,7 @@ import { OnboardingChecklist } from "./onboarding-checklist";
 import { FieldOnboardingToggle } from "./field-onboarding-toggle";
 import { ProjectSourcePanel } from "./project-source-panel";
 
-type TabId = "project-settings" | "accounts" | "sources" | "setup" | "meta-lead-sources" | "documents" | "phone" | "usage" | "activity" | "live-agent";
+type TabId = "project-settings" | "onboarding" | "accounts" | "sources" | "setup" | "meta-lead-sources" | "documents" | "phone" | "usage" | "activity" | "live-agent";
 
 type KnowledgeTabId = "source-documents" | "agent-knowledge";
 
@@ -268,12 +268,13 @@ function getOnboardingOverview(project: Project, phoneDocumentStatus: string) {
   return { items, summary, summaryStatus };
 }
 
-export function ProjectTabs({ accountsPanel, adminSettings, knowledgeUrls, onboardingFieldKeys, project, completion, elevenLabsKnowledgeBase, conversations, metaLeadSources, projectSources }: { accountsPanel?: ReactNode; knowledgeUrls?: KnowledgeUrl[]; onboardingFieldKeys?: AssistantFieldKey[]; adminSettings?: { canManageProjects: boolean; customerId: string; source: string }; project: Project; completion: number; elevenLabsKnowledgeBase?: { documents: ElevenLabsKnowledgeBaseDocument[]; error: string | null }; conversations?: { conversations: ElevenLabsConversation[]; usageConversations: ConversationUsage[]; error: string | null }; metaLeadSources?: MetaLeadSourcesResult; projectSources?: ProjectSourceData }) {
+export function ProjectTabs({ accountsPanel, onboardingPanel, adminSettings, knowledgeUrls, onboardingFieldKeys, project, completion, elevenLabsKnowledgeBase, conversations, metaLeadSources, projectSources }: { accountsPanel?: ReactNode; onboardingPanel?: ReactNode; knowledgeUrls?: KnowledgeUrl[]; onboardingFieldKeys?: AssistantFieldKey[]; adminSettings?: { canManageProjects: boolean; customerId: string; source: string }; project: Project; completion: number; elevenLabsKnowledgeBase?: { documents: ElevenLabsKnowledgeBaseDocument[]; error: string | null }; conversations?: { conversations: ElevenLabsConversation[]; usageConversations: ConversationUsage[]; error: string | null }; metaLeadSources?: MetaLeadSourcesResult; projectSources?: ProjectSourceData }) {
   const isAdminView = Boolean(adminSettings);
   const canEditProject = adminSettings?.canManageProjects ?? false;
   const isDeliveryProject = project.category === "ui_ux_design" || project.category === "website";
   const visibleTabs = useMemo(() => [
     { id: "project-settings" as const, label: "Projekt részletek" },
+    ...(onboardingPanel ? [{ id: "onboarding" as const, label: "Onboarding" }] : []),
     ...(accountsPanel ? [{ id: "accounts" as const, label: "Fiókok" }] : []),
     ...(isDeliveryProject ? [{ id: "sources" as const, label: "Forrás dokumentumok és forrás linkek" }] : []),
     ...(isDeliveryProject ? [] : [
@@ -285,7 +286,7 @@ export function ProjectTabs({ accountsPanel, adminSettings, knowledgeUrls, onboa
       { id: "activity" as const, label: "Aktivitás" },
       ...(!isAdminView ? [{ id: "live-agent" as const, label: "Élő agent" }] : []),
     ]),
-  ], [accountsPanel, isAdminView, isDeliveryProject, project.category]);
+  ], [accountsPanel, onboardingPanel, isAdminView, isDeliveryProject, project.category]);
   const [fieldKeys, setFieldKeys] = useState<AssistantFieldKey[] | undefined>(onboardingFieldKeys);
   const [fieldPending, setFieldPending] = useState(false);
   const [fieldError, setFieldError] = useState("");
@@ -470,6 +471,7 @@ export function ProjectTabs({ accountsPanel, adminSettings, knowledgeUrls, onboa
 
       <div className="tab-panel" id={`${activeTab}-panel`} role="tabpanel" aria-labelledby={`${activeTab}-tab`}>
         {activeTab === "sources" && isDeliveryProject && <ProjectSourcePanel canEdit={!isAdminView || canEditProject} category={project.category} documents={project.documentList} projectId={project.id} sources={projectSources ?? { links: [], linksAvailable: false, documentUrls: {} }} />}
+        {activeTab === "onboarding" && onboardingPanel}
         {activeTab === "accounts" && accountsPanel}
         {activeTab === "project-settings" && (
           <div className="tab-content">

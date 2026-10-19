@@ -12,6 +12,7 @@ import { getOnboardingAccounts } from "@/lib/onboarding-accounts-data";
 import { getKnowledgeUrls } from "@/lib/knowledge-urls-data";
 import { getOnboardingFieldConfig } from "@/lib/onboarding-config-data";
 import { OnboardingAccountsForm } from "./onboarding-accounts-form";
+import { OnboardingOverview } from "./onboarding-overview";
 import { ProjectAdminActions } from "./delete-project-button";
 
 export default async function AdminProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ from?: string }> }) {
@@ -46,7 +47,8 @@ export default async function AdminProjectPage({ params, searchParams }: { param
     isDeliveryProject ? getProjectSourceData(project.id) : Promise.resolve(undefined),
     isDeliveryProject ? Promise.resolve(undefined) : getKnowledgeUrls(project.id),
   ]);
-  const [onboardingAccounts, fieldConfig] = canManageProjects && !isDeliveryProject ? await Promise.all([getOnboardingAccounts(project.id), getOnboardingFieldConfig(project.id)]) : [null, null];
+  // Az onboarding áttekintő minden adminnak (csak olvasható); a szerkesztő fiókpanel csak a superadminnak.
+  const [onboardingAccounts, fieldConfig] = !isDeliveryProject ? await Promise.all([getOnboardingAccounts(project.id), getOnboardingFieldConfig(project.id)]) : [null, null];
   const backHref = from === "tasks" ? "/admin/tasks" : from === "projects" ? "/admin/projects" : `/admin/customers/${customer.id}/edit`;
   const backLabel = from === "tasks" ? "Vissza a teendőkhöz" : from === "projects" ? "Vissza a projektekhez" : "Vissza az ügyfélhez";
 
@@ -66,7 +68,7 @@ export default async function AdminProjectPage({ params, searchParams }: { param
         </div>
       </div>
 
-      <ProjectTabs knowledgeUrls={knowledgeUrls?.urls} accountsPanel={onboardingAccounts && fieldConfig ? <OnboardingAccountsForm customerId={customer.id} details={onboardingAccounts.allDetails} doneKeys={onboardingAccounts.doneKeys} projectId={project.id} selectedKeys={onboardingAccounts.selectedKeys} /> : undefined} onboardingFieldKeys={fieldConfig?.assistantFields} adminSettings={{ canManageProjects, customerId: customer.id, source: from ?? "" }} project={project} completion={completion} elevenLabsKnowledgeBase={elevenLabsKnowledgeBase} conversations={conversations} metaLeadSources={metaLeadSources} projectSources={projectSources} />
+      <ProjectTabs knowledgeUrls={knowledgeUrls?.urls} onboardingPanel={onboardingAccounts && fieldConfig && knowledgeUrls ? <OnboardingOverview accounts={onboardingAccounts.accounts} accountsAvailable={onboardingAccounts.available} assistantFields={fieldConfig.assistantFields} canSeeSecrets={canManageProjects} knowledgeUrls={knowledgeUrls.urls} project={project} /> : undefined} accountsPanel={canManageProjects && onboardingAccounts && fieldConfig ? <OnboardingAccountsForm customerId={customer.id} details={onboardingAccounts.allDetails} doneKeys={onboardingAccounts.doneKeys} projectId={project.id} selectedKeys={onboardingAccounts.selectedKeys} /> : undefined} onboardingFieldKeys={fieldConfig?.assistantFields} adminSettings={{ canManageProjects, customerId: customer.id, source: from ?? "" }} project={project} completion={completion} elevenLabsKnowledgeBase={elevenLabsKnowledgeBase} conversations={conversations} metaLeadSources={metaLeadSources} projectSources={projectSources} />
     </section>
   );
 }

@@ -2482,3 +2482,37 @@ button.task-calendar-more:hover { color: var(--teal); }
 /* Egyetlen fiók esetén a kártya a rács szélességének pontosan fele. */
 .onboarding-account-grid.single { grid-template-columns: minmax(0, 50%); }
 @media (max-width: 520px) { .onboarding-account-grid.single { grid-template-columns: minmax(0, 1fr); } }
+/* Admin: az ügyfél onboardingjának csak olvasható áttekintője */
+.admin-onboarding { display: grid; gap: 16px; }
+.admin-onboarding-summary { align-items: center; display: flex; flex-wrap: wrap; gap: 12px 20px; }
+.admin-onboarding-status { color: var(--color-hex-9ca8bf); font-size: 13px; }
+.admin-onboarding-status strong { color: var(--color-hex-f4f6ff); font-weight: 600; }
+.admin-onboarding-step { background: var(--color-hex-171d2b); border: 1px solid var(--color-hex-30384c); border-radius: 12px; display: grid; gap: 14px; padding: 18px 20px; }
+.admin-onboarding-step.done { border-color: var(--color-rgba-119-222-201-p2); }
+.admin-onboarding-step header { align-items: center; display: flex; gap: 12px; }
+.admin-onboarding-step h3 { color: var(--color-hex-f4f6ff); flex: 1; font-size: 15px; font-weight: 600; margin: 0; }
+.admin-onboarding-number { align-items: center; background: var(--color-hex-2d3548); border-radius: 50%; color: var(--color-hex-dfe4f3); display: inline-flex; font-size: 12px; font-weight: 800; height: 26px; justify-content: center; width: 26px; }
+.admin-onboarding-body { display: grid; gap: 10px; }
+.admin-onboarding-body h4 { color: var(--color-hex-9ca8bf); font-size: 12px; font-weight: 600; margin: 6px 0 0; }
+.admin-onboarding-body p { color: var(--color-hex-c7d0e6); font-size: 13px; line-height: 1.55; margin: 0; }
+.admin-onboarding-list { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.admin-onboarding-list li { align-items: center; display: flex; flex-wrap: wrap; font-size: 13px; gap: 4px 10px; }
+.admin-onboarding-list strong { color: var(--color-hex-f4f6ff); font-weight: 600; }
+.admin-onboarding-list a, .admin-onboarding-detail a { color: var(--color-hex-9ba7ff); }
+.admin-onboarding-muted { color: var(--color-hex-9ca8bf); font-size: 12px; }
+.admin-onboarding-detail { color: var(--color-hex-c7d0e6); font-size: 12px; margin-left: auto; overflow-wrap: anywhere; }
+.admin-onboarding-dot { background: var(--color-hex-505a9b); border-radius: 50%; display: inline-block; height: 8px; width: 8px; }
+.admin-onboarding-dot.ok { background: var(--color-hex-77dec9); }
+.admin-onboarding-fields { display: grid; gap: 12px; margin: 0; }
+.admin-onboarding-fields dt { color: var(--color-hex-9ca8bf); font-size: 11px; font-weight: 600; margin-bottom: 3px; }
+.admin-onboarding-fields dd { color: var(--color-hex-dfe4f3); font-size: 13px; line-height: 1.55; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.admin-onboarding-fields dd.empty { color: var(--color-hex-9ca8bf); font-style: italic; }
+:root[data-theme="light"] .admin-onboarding-step { background: var(--color-hex-ffffff); border-color: var(--color-hex-d9e0ec); }
+:root[data-theme="light"] .admin-onboarding-step.done { border-color: #12b76a; }
+:root[data-theme="light"] .admin-onboarding-step h3, :root[data-theme="light"] .admin-onboarding-list strong, :root[data-theme="light"] .admin-onboarding-status strong { color: var(--color-hex-172033); }
+:root[data-theme="light"] .admin-onboarding-number { background: var(--color-hex-eef2f7); color: var(--color-hex-3947b8); }
+:root[data-theme="light"] .admin-onboarding-body p, :root[data-theme="light"] .admin-onboarding-detail, :root[data-theme="light"] .admin-onboarding-fields dd { color: var(--color-hex-172033); }
+:root[data-theme="light"] .admin-onboarding-muted, :root[data-theme="light"] .admin-onboarding-body h4, :root[data-theme="light"] .admin-onboarding-status, :root[data-theme="light"] .admin-onboarding-fields dt, :root[data-theme="light"] .admin-onboarding-fields dd.empty { color: var(--color-hex-667085); }
+:root[data-theme="light"] .admin-onboarding-list a, :root[data-theme="light"] .admin-onboarding-detail a { color: var(--color-hex-3947b8); }
+:root[data-theme="light"] .admin-onboarding-dot { background: #d0d5dd; }
+:root[data-theme="light"] .admin-onboarding-dot.ok { background: #12b76a; }
