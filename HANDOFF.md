@@ -309,4 +309,4 @@ A Meta lead hívó asszisztensek többűrlapos leadforrás-kezelésének külső
 
 ## Onboarding az ügyfél Áttekintés oldalán (2026-10-19)
 
-- Az `/portal` Áttekintés oldalon, ha az ügyfélnek van `draft` státuszú hangasszisztens projektje (design/weboldal nem), az első ilyen projekt onboarding felülete (`OnboardingFlow`) a statisztikák fölött megjelenik. Nincs átirányítás a belépéskor (a korábbi, auth route-os megoldást elvetettük). Adatok: `app/portal/page.tsx`. `tsc` sikeres, bejelentkezett kézi teszt nem történt, nincs commitolva/deployolva.
+- Az `/portal` Áttekintés oldalon a projektlistában az első `draft` státuszú hangasszisztens projekt (design/weboldal nem) sávja helyett az onboarding felület (`OnboardingFlow`, „Onboarding · projektnév" címmel) jelenik meg; a többi projekt a megszokott sávként. Az oldal többi elrendezése (intro, statisztikák) változatlan. Adatok és megjelenítés: `app/portal/page.tsx`. `tsc` sikeres, bejelentkezett kézi teszt nem történt. Az előző verzió (felül, a statisztikák fölött) deployolva van (`0b32735`); ez a módosítás nincs commitolva/deployolva.
