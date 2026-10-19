@@ -2,7 +2,22 @@
 
 ## Aktuális cél
 
-A Meta lead hívó asszisztensek többűrlapos leadforrás-kezelésének külső ellenőrzése. A megvalósítás projektenként egy Facebook-oldalt és több Meta lead űrlapot kezel. A `20261005160000_add_meta_lead_sources.sql` migráció alkalmazási állapota ebben az átadásban nem lett ellenőrizve; cél Supabase projekt, migration history és felhasználói jóváhagyás nélkül ne alkalmazd.
+A projekt jelenlegi állapotának átadása Claude Code-nak (2026-10-19). A legközelebbi fejlesztési irányt a felhasználóval egyeztesd; a nyitott ellenőrzések közül elsőként a friss onboarding és az admin projektoldal szerepkörös, bejelentkezett kézi tesztje javasolt. Éles adatot vagy sémát ne módosíts külön jóváhagyás nélkül.
+
+## Aktuális átadás (2026-10-19)
+
+- Git: `master`, `HEAD` `2a84d3c` (`docs: note Meta/website lead source sub-tabs in handoff`), a helyi `origin/master` követő ref `c254531`; a helyi ág **1 committal előrébb van**. Távoli frissítést nem kérdeztem le, push nem történt ebben az átadásban.
+- A követett fájlokon az átadás előtt nem volt módosítás. Nem követett, más munkájának tekintett állományok: `.claude/launch.json` és `public/ads/` képek. Ezeket ne stage-eld, ne töröld automatikusan. A `.next` és `.next-dev` külső `~/.cache/voice-agent-app/` könyvtárra mutató szimbolikus linkek.
+- A jelenlegi kód Next.js 15/React 19/TypeScript portál Supabase Auth, Postgres, Storage és RLS háttérrel. Fő felületek: `/admin` (ügyfelek, projektek, feladatok, időnyilvántartás, pénzügyek) és `/portal` (ügyfélprojektek, onboarding, forrásanyagok, támogatás). A `app/admin/projects/new/` szuperadmin projektlétrehozás, az `app/admin/projects/[id]/onboarding-overview.tsx` olvasható admin onboarding-áttekintés, valamint a `app/portal/page.tsx` projektlistába ágyazott draft onboarding követett kódban van.
+- Legutóbbi funkcionális commitok: `fe181c2` (onboarding a draft projektsor helyén), `977f3b3` (Google Workspace útmutató), `c254531` (admin olvasható onboarding fül). A fenti régebbi szakaszokban szereplő „nincs commitolva” megjegyzések az akkori pillanatképek, **nem a jelenlegi Git-állapotot írják le**.
+- Ellenőrzés most: `npm test` **29/29 sikeres**; `npx tsc --noEmit --incremental false` sikeres. `npm run build` a külső helyre mutató `.next/trace` megnyitásakor `EPERM` hibával megállt; a sandboxon kívüli futtatásra kért engedélyt a felhasználó elutasította, így **a build nem igazolt**. `CI=1 npm run lint` interaktív ESLint-konfigurációs kérdésig jutott, ezért **nincs érvényes lint eredmény**. Bejelentkezett böngészős vagy élő Supabase-teszt ebben az átadásban nem történt.
+- Külső állapotot ne következtess a Gitből: a 2026-10-19-i deployról lent csak az indítás szerepel; a sikerét és a jelenlegi éles verziót külön ellenőrizni kell. A `20261008183524_add_project_source_links.sql` SQL Editorban futott, ezért a migrációtörténet eltérhet. `supabase db push` előtt célprojektet és historyt olvasási módban egyeztesd; production SQL-hez és adatmozgatáshoz kifejezett felhasználói jóváhagyás kell.
+
+### Következő konkrét lépések
+
+1. Egyeztesd a következő fejlesztési feladatot a felhasználóval. Ha a jelenlegi funkciók ellenőrzése a cél, superadmin, normál admin és ügyfél fiókkal teszteld az onboarding mentést, az admin olvasható fület és a szerepkörös láthatóságot; élő rekordot csak jóváhagyott teszttervvel hozz létre.
+2. Ellenőrizd külön a GitHub Actions/deploy sikerét és az éles verziót. Ne pusholj vagy deployolj pusztán az átadás miatt; deploy előtt kövesd az `AGENTS.md` tesztadatokra és közös Supabase projektre vonatkozó egyeztetési szabályait.
+3. A teljes buildet csak megfelelő írási jogosultságú környezetben futtasd újra; a linthez külön, nem interaktív ESLint-beállítás szükséges. A régi handoff-szakaszok állapotállításait mindig a Git- és külső állapottal vesd össze.
 
 ## Feladat időmérő (2026-10-09)
 
