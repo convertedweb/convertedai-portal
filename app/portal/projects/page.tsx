@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarClock, Phone, Plus } from "lucide-react";
+import { ArrowRight, CalendarClock, Phone } from "lucide-react";
 import Link from "next/link";
 import { categoryLabels, getProjects, statusLabels } from "@/lib/data";
 
@@ -13,7 +13,6 @@ export default async function ProjectsPage() {
           <h1>Telefonos asszisztensek</h1>
           <p className="intro-copy">Tekintsd át a telefonos asszisztenseidet, és nyisd meg a hozzájuk tartozó dokumentumokat, státuszokat és aktivitást.</p>
         </div>
-        <Link className="button" href="/portal/projects/new"><Plus size={15} /> Új projekt</Link>
       </div>
 
       <div className="projects-toolbar">
@@ -23,7 +22,7 @@ export default async function ProjectsPage() {
 
       <div className="project-list projects-page-list">
         {projects.map((project) => (
-          <Link className="project-card project-card-detailed" href={`/portal/agents/${project.id}`} key={project.id}>
+          <Link className="project-card project-card-detailed" href={project.status === "draft" && project.category !== "ui_ux_design" && project.category !== "website" ? `/portal/projects/${project.id}/onboarding` : `/portal/agents/${project.id}`} key={project.id}>
             <div className="project-main"><div className="project-title">{project.name}</div><div className="project-agent">{categoryLabels[project.category]} · {project.agentDisplayName}</div></div>
             <div className="project-detail-cell"><span className="detail-value"><Phone size={14} />{project.phoneNumber ?? "Telefonszám még nincs"}</span></div>
             <div className="project-detail-cell"><span className="detail-value"><CalendarClock size={14} />{project.createdAt}</span></div>

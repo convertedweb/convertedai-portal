@@ -173,9 +173,9 @@ export function CustomerSettingsTabs({
                     <div className="project-agent">{categoryLabels[project.category]}{project.category === "ui_ux_design" || project.category === "website" ? "" : ` · ${project.agentDisplayName}`}</div>
                     <div className={`status ${project.status}`}><span className="status-dot" />{statusLabels[project.status]}</div>
                   </div>
-                  <div className="project-details">
-                    <div><span className="detail-label">Telefonszám</span><span className="detail-value"><Phone size={14} />{project.phoneNumber ?? "Még nincs hozzárendelve"}</span></div>
-                    <div><span className="detail-label">Dokumentumok</span><span className="detail-value"><FileText size={14} />{project.documentsReady} / {project.documents} feldolgozva</span></div>
+                  <div className={`project-details ${project.category === "ui_ux_design" || project.category === "website" ? "project-details-delivery" : ""}`}>
+                    {project.category !== "ui_ux_design" && project.category !== "website" && <div><span className="detail-label">Telefonszám</span><span className="detail-value"><Phone size={14} />{project.phoneNumber ?? "Még nincs hozzárendelve"}</span></div>}
+                    {project.category !== "ui_ux_design" && project.category !== "website" && <div><span className="detail-label">Dokumentumok</span><span className="detail-value"><FileText size={14} />{project.documentsReady} / {project.documents} feldolgozva</span></div>}
                     <div><span className="detail-label">Utolsó frissítés</span><span className="detail-value">{project.updatedAt}</span></div>
                   </div>
                   <span className="icon-button" aria-label={`${project.name} admin adatlapja`} title="Projekt adatok">
@@ -301,8 +301,8 @@ function CreateInvoiceForm({ customer }: { customer: AdminCustomer }) {
   );
 }
 
-function AdminCreateProjectForm({ customer }: { customer: AdminCustomer }) {
-  const [isOpen, setIsOpen] = useState(false);
+export function AdminCreateProjectForm({ customer, expanded = false }: { customer: AdminCustomer; expanded?: boolean }) {
+  const [isOpen, setIsOpen] = useState(expanded);
   const [category, setCategory] = useState("voice_agent");
   const [state, formAction, pending] = useActionState(createAdminProject, createProjectInitialState);
   const isVoiceAgent = category === "voice_agent" || category === "meta_lead_caller";
@@ -311,14 +311,13 @@ function AdminCreateProjectForm({ customer }: { customer: AdminCustomer }) {
 
   return (
     <div className="admin-create-project">
-      <button className="secondary-button" onClick={() => setIsOpen((value) => !value)} type="button">
+      {!expanded && <button className="secondary-button" onClick={() => setIsOpen((value) => !value)} type="button">
         <Plus size={15} /> Új projekt létrehozása
-      </button>
+      </button>}
 
       {isOpen && (
         <form action={formAction} className="admin-create-project-form">
           <input name="customerId" type="hidden" value={customer.id} />
-          <input name="companyName" type="hidden" value={customer.companyName} />
           <div className="settings-form-grid">
             <label className="field"><span>Projekt neve</span><div className="prefixed-input"><span>{customer.companyName} -</span><input name="projectName" placeholder="Projekt neve" required /></div></label>
             <label className="field"><span>Kategória</span><select name="category" onChange={(event) => setCategory(event.target.value)} value={category}>
@@ -384,7 +383,7 @@ function AdminCreateProjectForm({ customer }: { customer: AdminCustomer }) {
             </label>
           </div>}
 
-          <label className="field date-field"><span>Tervezett indítás</span><FormDatePicker defaultValue={getTodayDateInputValue()} name="plannedLaunchDate" /></label>
+          <label className="field date-field"><span>Projekt létrehozás</span><FormDatePicker defaultValue={getTodayDateInputValue()} name="projectCreatedOn" /></label>
           {state.error && <p className="form-error">{state.error}</p>}
           <div className="settings-actions">
             <span className="save-note"><FolderKanban size={15} /> Superadmin által létrehozott elsődleges projekt</span>

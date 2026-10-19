@@ -1,4 +1,4 @@
-import type { DocumentProcessingStatus, ElevenLabsAgentStatus, GoogleAccessStatus, PhoneRequestType, Project, ProjectCategory, ProjectDocument, ProjectStatus, TelnyxStatus } from "@/lib/project-types";
+import type { DocumentProcessingStatus, ElevenLabsAgentStatus, GoogleAccessStatus, PhoneOwnerType, PhoneRequestType, Project, ProjectCategory, ProjectDocument, ProjectStatus, TelnyxStatus } from "@/lib/project-types";
 export { categoryLabels, documentStatusLabels, elevenLabsAgentStatusLabels, googleAccessStatusLabels, phoneRequestLabels, statusLabels, telnyxStatusLabels } from "@/lib/project-types";
 
 export const mockProjects: Project[] = [
@@ -99,6 +99,7 @@ type DatabaseProject = {
   monthly_minute_limit: number | null;
   carryover_minutes: number | null;
   minute_rate_huf?: number | null;
+  phone_owner_type?: PhoneOwnerType | null;
   status: ProjectStatus;
   telnyx_status: TelnyxStatus | null;
   greeting: string | null;
@@ -188,6 +189,7 @@ function mapProject(project: DatabaseProject, documents: DatabaseDocument[]): Pr
     category: project.category ?? "voice_agent",
     phoneNumber: project.phone_number,
     phoneRequestType: project.phone_request_type,
+    phoneOwnerType: project.phone_owner_type ?? null,
     phoneDocumentsReceived: project.phone_documents_received ?? false,
     googleAccountEmail: project.google_account_email,
     googlePasswordShareUrl: project.google_password_share_url,
@@ -211,6 +213,7 @@ function mapProject(project: DatabaseProject, documents: DatabaseDocument[]): Pr
     plannedLaunchDate: project.planned_launch_date,
     launchedAt: formatDate(project.launched_at),
     launchedAtInput: formatDateTimeLocal(project.launched_at),
+    launchedAtUnix: project.launched_at ? Math.floor(Date.parse(project.launched_at) / 1000) : null,
     createdAt: formatDate(project.created_at),
     updatedAt: formatDate(project.updated_at),
     documents: projectDocuments.length,
@@ -355,6 +358,13 @@ export async function getProject(id: string) {
       .eq("id", id)
       .single();
     project.minute_rate_huf = rateRow?.minute_rate_huf ?? null;
+    // Külön lekérdezés, hogy a migráció előtt se törjön el a projekt betöltése (hiányzó oszlop → null).
+    const { data: ownerRow } = await supabase
+      .from("projects")
+      .select("phone_owner_type")
+      .eq("id", id)
+      .maybeSingle();
+    project.phone_owner_type = (ownerRow?.phone_owner_type as PhoneOwnerType | null | undefined) ?? null;
     const { data: documentRows, error: documentError } = await supabase
       .from("documents")
       .select("id, project_id, category, file_name, mime_type, size_bytes, processing_status, created_at")

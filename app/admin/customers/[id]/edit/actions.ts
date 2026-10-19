@@ -544,7 +544,7 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
   const googlePasswordShareUrl = requiredText(formData.get("googlePasswordShareUrl")) || null;
   const googleAccessStatus = isDeliveryProject ? "not_provided" : parseGoogleAccessStatus(formData.get("googleAccessStatus"));
   const googleAccessRequired = isDeliveryProject ? false : formData.get("googleAccessRequired") === "on";
-  const plannedLaunchDate = optionalDate(formData.get("plannedLaunchDate"));
+  const projectCreatedOn = optionalDate(formData.get("projectCreatedOn"));
 
   if (!customerId || !projectName) {
     return { error: "Az ügyfél és a projekt neve kötelező." };
@@ -592,7 +592,7 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
       google_access_confirmed: isDeliveryProject ? false : Boolean(googleAccountEmail && googlePasswordShareUrl),
       google_access_status: googleAccessStatus,
       google_access_required: googleAccessRequired,
-      planned_launch_date: plannedLaunchDate,
+      planned_launch_date: projectCreatedOn,
     })
     .select("id")
     .single();

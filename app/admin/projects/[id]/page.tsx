@@ -6,6 +6,12 @@ import { getAdminProject } from "@/lib/admin-data";
 import { statusLabels } from "@/lib/data";
 import { listElevenLabsConversations, listElevenLabsKnowledgeBaseDocuments } from "@/lib/elevenlabs";
 import { getMetaLeadSources } from "@/lib/meta-leads";
+import { getProjectSourceData } from "@/lib/project-source-data";
+import { isDesignProject } from "@/lib/project-sources";
+import { getOnboardingAccounts } from "@/lib/onboarding-accounts-data";
+import { getKnowledgeUrls } from "@/lib/knowledge-urls-data";
+import { getOnboardingFieldConfig } from "@/lib/onboarding-config-data";
+import { OnboardingAccountsForm } from "./onboarding-accounts-form";
 import { ProjectAdminActions } from "./delete-project-button";
 
 export default async function AdminProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ from?: string }> }) {
@@ -32,11 +38,15 @@ export default async function AdminProjectPage({ params, searchParams }: { param
   if (!project || !customer) notFound();
 
   const completion = project.documents > 0 ? Math.round((project.documentsReady / project.documents) * 100) : 0;
-  const [elevenLabsKnowledgeBase, conversations, metaLeadSources] = await Promise.all([
-    listElevenLabsKnowledgeBaseDocuments(project.elevenLabsAgentId),
-    listElevenLabsConversations(project.elevenLabsAgentId, project.id),
+  const isDeliveryProject = isDesignProject(project.category);
+  const [elevenLabsKnowledgeBase, conversations, metaLeadSources, projectSources, knowledgeUrls] = await Promise.all([
+    isDeliveryProject ? Promise.resolve(undefined) : listElevenLabsKnowledgeBaseDocuments(project.elevenLabsAgentId),
+    isDeliveryProject ? Promise.resolve(undefined) : listElevenLabsConversations(project.elevenLabsAgentId, project.id),
     project.category === "meta_lead_caller" ? getMetaLeadSources(project.id) : Promise.resolve(undefined),
+    isDeliveryProject ? getProjectSourceData(project.id) : Promise.resolve(undefined),
+    isDeliveryProject ? Promise.resolve(undefined) : getKnowledgeUrls(project.id),
   ]);
+  const [onboardingAccounts, fieldConfig] = canManageProjects && !isDeliveryProject ? await Promise.all([getOnboardingAccounts(project.id), getOnboardingFieldConfig(project.id)]) : [null, null];
   const backHref = from === "tasks" ? "/admin/tasks" : from === "projects" ? "/admin/projects" : `/admin/customers/${customer.id}/edit`;
   const backLabel = from === "tasks" ? "Vissza a teendőkhöz" : from === "projects" ? "Vissza a projektekhez" : "Vissza az ügyfélhez";
 
@@ -49,14 +59,14 @@ export default async function AdminProjectPage({ params, searchParams }: { param
         <div>
           <p className="eyebrow">{customer.companyName}</p>
           <h1>{project.name}</h1>
-          <p className="detail-subtitle">{project.agentDisplayName}</p>
+          {!isDeliveryProject && <p className="detail-subtitle">{project.agentDisplayName}</p>}
         </div>
         <div className="detail-actions">
           <ProjectAdminActions canManageProjects={canManageProjects} customerId={customer.id} projectId={project.id} projectName={project.name} source={from ?? ""} status={project.status} />
         </div>
       </div>
 
-      <ProjectTabs adminSettings={{ canManageProjects, customerId: customer.id, source: from ?? "" }} project={project} completion={completion} elevenLabsKnowledgeBase={elevenLabsKnowledgeBase} conversations={conversations} metaLeadSources={metaLeadSources} />
+      <ProjectTabs knowledgeUrls={knowledgeUrls?.urls} accountsPanel={onboardingAccounts && fieldConfig ? <OnboardingAccountsForm customerId={customer.id} details={onboardingAccounts.allDetails} doneKeys={onboardingAccounts.doneKeys} projectId={project.id} selectedKeys={onboardingAccounts.selectedKeys} /> : undefined} onboardingFieldKeys={fieldConfig?.assistantFields} adminSettings={{ canManageProjects, customerId: customer.id, source: from ?? "" }} project={project} completion={completion} elevenLabsKnowledgeBase={elevenLabsKnowledgeBase} conversations={conversations} metaLeadSources={metaLeadSources} projectSources={projectSources} />
     </section>
   );
 }

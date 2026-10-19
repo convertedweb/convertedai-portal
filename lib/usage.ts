@@ -14,6 +14,12 @@ export function getUsageMonthKey(unixSeconds: number) {
   return `${year}-${month}`;
 }
 
+// A perceket csak az indítás időpontjától számoljuk; indítási idő nélkül (vagy dátum nélküli hívásnál) nem számolunk.
+export function filterUsageSince(conversations: ConversationUsage[], sinceUnix: number | null) {
+  if (sinceUnix === null || !Number.isFinite(sinceUnix)) return [];
+  return conversations.filter((conversation) => conversation.startTimeUnix !== null && conversation.startTimeUnix >= sinceUnix);
+}
+
 export function calculateUsageCostHuf(seconds: number, minuteRateHuf: number | null) {
   if (minuteRateHuf === null) return null;
   return Math.round((seconds / 60) * minuteRateHuf * 100) / 100;

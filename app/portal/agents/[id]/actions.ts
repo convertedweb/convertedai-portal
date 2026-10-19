@@ -3,6 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logCustomerActivity } from "@/lib/activity-log";
+import { getProject } from "@/lib/data";
+import { getOnboardingAccounts } from "@/lib/onboarding-accounts-data";
+import { getKnowledgeUrls } from "@/lib/knowledge-urls-data";
+import { getOnboardingFieldConfig } from "@/lib/onboarding-config-data";
+import { getRequiredOnboardingState } from "@/lib/project-onboarding";
+import { isDesignProject } from "@/lib/project-sources";
 import { updateElevenLabsKnowledgeBaseDocument } from "@/lib/elevenlabs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -74,7 +80,7 @@ async function getAccessibleProject(projectId: string) {
 
 function parsePhoneDocumentCategory(value: FormDataEntryValue | null) {
   const category = requiredText(value);
-  return ["phone_id_copy", "phone_utility_bill", "phone_company_registration"].includes(category)
+  return ["phone_id_copy", "phone_utility_bill", "phone_company_registration", "phone_sole_trader_registration"].includes(category)
     ? category
     : "";
 }
@@ -82,12 +88,15 @@ function parsePhoneDocumentCategory(value: FormDataEntryValue | null) {
 export async function updateVoiceAgentSetup(_previousState: VoiceSetupState, formData: FormData) {
   const projectId = requiredText(formData.get("projectId"));
   const agentName = requiredText(formData.get("agentName"));
-  const greeting = requiredText(formData.get("greeting"));
-  const callInstructions = requiredText(formData.get("callInstructions"));
-  const handoffInstructions = requiredText(formData.get("handoffInstructions"));
 
   if (!projectId || !agentName) {
     return { error: "Az agent neve kötelező." };
+  }
+
+  // Csak az űrlapon szereplő mezőket írjuk, így a nem kért mezők értéke nem törlődik.
+  const optionalFields: Record<string, string> = {};
+  for (const [field, column] of [["greeting", "greeting"], ["callInstructions", "call_instructions"], ["handoffInstructions", "handoff_instructions"]] as const) {
+    if (formData.has(field)) optionalFields[column] = requiredText(formData.get(field));
   }
 
   const access = await getAccessibleProject(projectId);
@@ -97,9 +106,7 @@ export async function updateVoiceAgentSetup(_previousState: VoiceSetupState, for
     .from("projects")
     .update({
       agent_display_name: agentName,
-      greeting,
-      call_instructions: callInstructions,
-      handoff_instructions: handoffInstructions,
+      ...optionalFields,
       updated_at: new Date().toISOString(),
     })
     .eq("id", projectId);
@@ -304,6 +311,15 @@ export async function submitProjectForReview(_previousState: ReviewRequestState,
 
   if (access.project.status !== "draft") {
     return { error: "Csak előkészítés alatt álló projektet lehet ellenőrzésre küldeni." };
+  }
+
+  const project = await getProject(projectId);
+  if (!project) return { error: "Nem található vagy nem elérhető ez a projekt." };
+  if (!isDesignProject(project.category)) {
+    const [{ accounts, available }, { assistantFields }, { urls }] = await Promise.all([getOnboardingAccounts(projectId), getOnboardingFieldConfig(projectId), getKnowledgeUrls(projectId)]);
+    if (!getRequiredOnboardingState(project, !available || accounts.every((account) => account.done), assistantFields, urls.length).complete) {
+      return { error: "A beküldés előtt töltsd ki a kötelező onboarding lépéseket: fiókok, asszisztens beállítások, tudásbázis." };
+    }
   }
 
   const adminSupabase = createAdminClient();

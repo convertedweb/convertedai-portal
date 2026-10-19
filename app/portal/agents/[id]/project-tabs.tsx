@@ -2,40 +2,35 @@
 
 import { AlertCircle, Banknote, BellRing, Bot, CalendarClock, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, FileCheck2, FileText, FolderKanban, KeyRound, Layers3, LinkIcon, Mail, MessageSquareText, Pencil, Phone, PlayCircle, Save, Settings2, Trash2, TriangleAlert, Upload } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ElevenLabsAgentWidget } from "@/app/elevenlabs-agent-widget";
 import { FormDatePicker } from "@/app/form-date-picker";
 import { getTodayDateInputValue } from "@/lib/date-input";
+import { ElevenLabsAgentWidget } from "@/app/elevenlabs-agent-widget";
 import { categoryLabels, documentStatusLabels, googleAccessStatusLabels, phoneRequestLabels, statusLabels, telnyxStatusLabels, type DocumentProcessingStatus, type Project } from "@/lib/project-types";
 import type { ElevenLabsConversation, ElevenLabsKnowledgeBaseDocument } from "@/lib/elevenlabs";
 import type { MetaLeadSourcesResult } from "@/lib/meta-leads";
-import { calculateUsageCostHuf, getUsageMonthKey, summarizeMonthlyUsage, type ConversationUsage } from "@/lib/usage";
-import { deleteProjectConversation, provisionElevenLabsAgent, updateAgentKnowledgeBaseDocument as updateAdminAgentKnowledgeBaseDocument, updateElevenLabsAgentId, updateProjectAssetFlags, updateProjectGoogleAccess, updateProjectMinuteLimits, updateProjectPhone, updateProjectSettings, type ProjectAdminActionState } from "@/app/admin/projects/[id]/actions";
+import { getCustomerOnboardingTasks } from "@/lib/project-onboarding";
+import type { KnowledgeUrl } from "@/lib/knowledge-urls-data";
+import type { AssistantFieldKey } from "@/lib/onboarding-fields";
+import type { ProjectSourceData } from "@/lib/project-source-data";
+import { calculateUsageCostHuf, filterUsageSince, getUsageMonthKey, summarizeMonthlyUsage, type ConversationUsage } from "@/lib/usage";
+import { deleteProjectConversation, provisionElevenLabsAgent, updateAgentKnowledgeBaseDocument as updateAdminAgentKnowledgeBaseDocument, updateElevenLabsAgentId, updateProjectAssetFlags, updateProjectGoogleAccess, updateProjectMinuteLimits, updateProjectPhone, updateProjectSettings, type ProjectAdminActionState, updateOnboardingFields } from "@/app/admin/projects/[id]/actions";
 import { submitProjectForReview, updateAgentKnowledgeBaseDocument as updateCustomerAgentKnowledgeBaseDocument, updateVoiceAgentSetup, uploadKnowledgeDocument, type AgentKnowledgeUpdateState, type KnowledgeUploadState, type ReviewRequestState, type VoiceSetupState } from "./actions";
 import { MetaLeadSourcesPanel } from "./meta-lead-sources-panel";
+import { OnboardingChecklist } from "./onboarding-checklist";
+import { FieldOnboardingToggle } from "./field-onboarding-toggle";
+import { ProjectSourcePanel } from "./project-source-panel";
 
-type TabId = "project-settings" | "setup" | "meta-lead-sources" | "documents" | "phone" | "google-access" | "usage" | "activity" | "live-agent";
-
-type Tab = {
-  id: TabId;
-  label: string;
-};
+type TabId = "project-settings" | "accounts" | "sources" | "setup" | "meta-lead-sources" | "documents" | "phone" | "usage" | "activity" | "live-agent";
 
 type KnowledgeTabId = "source-documents" | "agent-knowledge";
-
-const tabs: Tab[] = [
-  { id: "setup", label: "Agent beállítások" },
-  { id: "documents", label: "Tudásbázis" },
-  { id: "phone", label: "Telefon" },
-  { id: "activity", label: "Aktivitás" },
-];
 
 const voiceInitialState: VoiceSetupState = {};
 const uploadInitialState: KnowledgeUploadState = {};
 const projectSettingsInitialState: ProjectAdminActionState = {};
-const phoneSettingsInitialState: ProjectAdminActionState = {};
 const googleAccessInitialState: ProjectAdminActionState = {};
+const phoneSettingsInitialState: ProjectAdminActionState = {};
 const assetFlagsInitialState: ProjectAdminActionState = {};
 const minuteLimitsInitialState: ProjectAdminActionState = {};
 const elevenLabsInitialState: ProjectAdminActionState = {};
@@ -51,6 +46,7 @@ const phoneDocumentLabels = {
   phone_id_copy: "Igazolvány másolat",
   phone_utility_bill: "Közüzemi számla",
   phone_company_registration: "Cégbejegyzés másolat",
+  phone_sole_trader_registration: "Egyéni vállalkozói igazolás (EVNY-kivonat)",
 } as const;
 
 function formatFileSize(bytes: number) {
@@ -272,20 +268,46 @@ function getOnboardingOverview(project: Project, phoneDocumentStatus: string) {
   return { items, summary, summaryStatus };
 }
 
-export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnowledgeBase, conversations, metaLeadSources }: { adminSettings?: { canManageProjects: boolean; customerId: string; source: string }; project: Project; completion: number; elevenLabsKnowledgeBase?: { documents: ElevenLabsKnowledgeBaseDocument[]; error: string | null }; conversations?: { conversations: ElevenLabsConversation[]; usageConversations: ConversationUsage[]; error: string | null }; metaLeadSources?: MetaLeadSourcesResult }) {
+export function ProjectTabs({ accountsPanel, adminSettings, knowledgeUrls, onboardingFieldKeys, project, completion, elevenLabsKnowledgeBase, conversations, metaLeadSources, projectSources }: { accountsPanel?: ReactNode; knowledgeUrls?: KnowledgeUrl[]; onboardingFieldKeys?: AssistantFieldKey[]; adminSettings?: { canManageProjects: boolean; customerId: string; source: string }; project: Project; completion: number; elevenLabsKnowledgeBase?: { documents: ElevenLabsKnowledgeBaseDocument[]; error: string | null }; conversations?: { conversations: ElevenLabsConversation[]; usageConversations: ConversationUsage[]; error: string | null }; metaLeadSources?: MetaLeadSourcesResult; projectSources?: ProjectSourceData }) {
   const isAdminView = Boolean(adminSettings);
   const canEditProject = adminSettings?.canManageProjects ?? false;
+  const isDeliveryProject = project.category === "ui_ux_design" || project.category === "website";
   const visibleTabs = useMemo(() => [
     { id: "project-settings" as const, label: "Projekt részletek" },
-    { id: "setup" as const, label: "Agent beállítások" },
-    ...(project.category === "meta_lead_caller" ? [{ id: "meta-lead-sources" as const, label: "Lead űrlapok" }] : []),
-    ...(isAdminView ? [{ id: "google-access" as const, label: "Google hozzáférés" }] : []),
-    { id: "documents" as const, label: "Tudásbázis" },
-    ...(isAdminView ? [{ id: "phone" as const, label: "Telefon" }] : []),
-    { id: "usage" as const, label: "Forgalom" },
-    { id: "activity" as const, label: "Aktivitás" },
-    ...(!isAdminView ? [{ id: "live-agent" as const, label: "Élő agent" }] : []),
-  ], [isAdminView, project.category]);
+    ...(accountsPanel ? [{ id: "accounts" as const, label: "Fiókok" }] : []),
+    ...(isDeliveryProject ? [{ id: "sources" as const, label: "Forrás dokumentumok és forrás linkek" }] : []),
+    ...(isDeliveryProject ? [] : [
+      { id: "setup" as const, label: "Agent beállítások" },
+      ...(project.category === "meta_lead_caller" ? [{ id: "meta-lead-sources" as const, label: "Lead űrlapok" }] : []),
+      { id: "documents" as const, label: "Tudásbázis" },
+      ...(isAdminView ? [{ id: "phone" as const, label: "Telefon" }] : []),
+      { id: "usage" as const, label: "Forgalom" },
+      { id: "activity" as const, label: "Aktivitás" },
+      ...(!isAdminView ? [{ id: "live-agent" as const, label: "Élő agent" }] : []),
+    ]),
+  ], [accountsPanel, isAdminView, isDeliveryProject, project.category]);
+  const [fieldKeys, setFieldKeys] = useState<AssistantFieldKey[] | undefined>(onboardingFieldKeys);
+  const [fieldPending, setFieldPending] = useState(false);
+  const [fieldError, setFieldError] = useState("");
+
+  // Superadmin: mező megjelenítése az ügyfél onboardingján; kattintásra azonnal ment, hibánál visszaáll.
+  async function toggleOnboardingField(key: AssistantFieldKey) {
+    if (!fieldKeys || !adminSettings) return;
+    const next = fieldKeys.includes(key) ? fieldKeys.filter((current) => current !== key) : [...fieldKeys, key];
+    const data = new FormData();
+    data.set("projectId", project.id);
+    data.set("customerId", adminSettings.customerId);
+    next.forEach((current) => data.append("assistantFields", current));
+    setFieldKeys(next);
+    setFieldError("");
+    setFieldPending(true);
+    const result = await updateOnboardingFields({}, data);
+    setFieldPending(false);
+    if (result.error) {
+      setFieldKeys(fieldKeys);
+      setFieldError(result.error);
+    }
+  }
   const searchParams = useSearchParams();
   const getInitialTab = () => {
     const requestedTab = searchParams.get("tab") as TabId | null;
@@ -307,8 +329,8 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
   const [setupState, setupAction, setupPending] = useActionState(updateVoiceAgentSetup, voiceInitialState);
   const [uploadState, uploadAction, uploadPending] = useActionState(uploadKnowledgeDocument, uploadInitialState);
   const [projectSettingsState, projectSettingsAction, projectSettingsPending] = useActionState<ProjectAdminActionState, FormData>(updateProjectSettings, projectSettingsInitialState);
-  const [phoneSettingsState, phoneSettingsAction, phoneSettingsPending] = useActionState<ProjectAdminActionState, FormData>(updateProjectPhone, phoneSettingsInitialState);
   const [googleAccessState, googleAccessAction, googleAccessPending] = useActionState<ProjectAdminActionState, FormData>(updateProjectGoogleAccess, googleAccessInitialState);
+  const [phoneSettingsState, phoneSettingsAction, phoneSettingsPending] = useActionState<ProjectAdminActionState, FormData>(updateProjectPhone, phoneSettingsInitialState);
   const [assetFlagsState, assetFlagsAction, assetFlagsPending] = useActionState<ProjectAdminActionState, FormData>(updateProjectAssetFlags, assetFlagsInitialState);
   const [minuteLimitsState, minuteLimitsAction, minuteLimitsPending] = useActionState<ProjectAdminActionState, FormData>(updateProjectMinuteLimits, minuteLimitsInitialState);
   const [elevenLabsState, elevenLabsAction, elevenLabsPending] = useActionState<ProjectAdminActionState, FormData>(provisionElevenLabsAgent, elevenLabsInitialState);
@@ -357,6 +379,8 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
     const requestedTab = searchParams.get("tab") as TabId | null;
     if (requestedTab && visibleTabs.some((tab) => tab.id === requestedTab)) {
       setActiveTab(requestedTab);
+    } else {
+      setActiveTab((current) => visibleTabs.some((tab) => tab.id === current) ? current : "project-settings");
     }
   }, [searchParams, visibleTabs]);
 
@@ -366,8 +390,8 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
   const monthlyMinuteLimit = project.monthlyMinuteLimit ?? 1000;
   const carryoverMinutes = project.carryoverMinutes ?? Math.round(monthlyMinuteLimit * 0.5);
   const usageSummary = useMemo(
-    () => summarizeMonthlyUsage(conversations?.usageConversations ?? [], currentMonthKey),
-    [conversations?.usageConversations, currentMonthKey],
+    () => summarizeMonthlyUsage(filterUsageSince(conversations?.usageConversations ?? [], project.launchedAtUnix ?? null), currentMonthKey),
+    [conversations?.usageConversations, currentMonthKey, project.launchedAtUnix],
   );
   const availableSeconds = (monthlyMinuteLimit + carryoverMinutes) * 60;
   const remainingSeconds = Math.max(0, availableSeconds - usageSummary.currentMonthSeconds);
@@ -400,6 +424,10 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
       ? "E-mailben megkapva"
       : "Még nincs rögzítve";
   const onboardingOverview = getOnboardingOverview(project, phoneDocumentStatus);
+  // Csak a korábbi projekteknél jelenik meg, ahol az ügyfél már megadott Google fiókot vagy hozzáférést.
+  const hasGoogleData = Boolean(project.googleAccountEmail || project.googlePasswordShareUrl || project.googleAccessStatus !== "not_provided");
+  const customerOnboardingTasks = getCustomerOnboardingTasks(project, projectSources?.links.length ?? 0);
+  const showCustomerOnboarding = !isAdminView && (project.status === "draft" || project.status === "review_requested" || project.status === "building");
 
   useEffect(() => {
     if (!selectedConversationId) return;
@@ -419,6 +447,10 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
 
   return (
     <div className="detail-tabs">
+      {showCustomerOnboarding && <OnboardingChecklist tasks={customerOnboardingTasks} onOpenTab={(tab) => {
+        if (tab === "documents") setKnowledgeTab("source-documents");
+        setActiveTab(tab);
+      }} />}
       <div className="tabs-list" role="tablist" aria-label="Projekt részletei">
         {visibleTabs.map((tab) => (
           <button
@@ -437,6 +469,8 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
       </div>
 
       <div className="tab-panel" id={`${activeTab}-panel`} role="tabpanel" aria-labelledby={`${activeTab}-tab`}>
+        {activeTab === "sources" && isDeliveryProject && <ProjectSourcePanel canEdit={!isAdminView || canEditProject} category={project.category} documents={project.documentList} projectId={project.id} sources={projectSources ?? { links: [], linksAvailable: false, documentUrls: {} }} />}
+        {activeTab === "accounts" && accountsPanel}
         {activeTab === "project-settings" && (
           <div className="tab-content">
             <div className="tab-card">
@@ -446,7 +480,7 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
               </div>
               {adminSettings ? (
                 <>
-                  <div className="onboarding-overview">
+                  {!isDeliveryProject && <div className="onboarding-overview">
                     <div className="onboarding-overview-header">
                       <div>
                         <span>Onboarding áttekintő</span>
@@ -465,7 +499,7 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </div>}
                   {canEditProject ? (
                     <form action={projectSettingsAction} className="voice-setup-form">
                       <input name="projectId" type="hidden" value={project.id} />
@@ -475,14 +509,13 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                       <div className="settings-form-grid">
                         <label className="field"><span>Projekt neve</span><input name="projectName" required defaultValue={project.name} /></label>
                         <label className="field"><span>Kategória</span><select name="category" defaultValue={project.category}>
-                          <option value="voice_agent">{categoryLabels.voice_agent}</option>
-                          <option value="meta_lead_caller">{categoryLabels.meta_lead_caller}</option>
-                          <option value="chatbot">{categoryLabels.chatbot}</option>
-                          <option value="automation">{categoryLabels.automation}</option>
+                          {Object.entries(categoryLabels).map(([category, label]) => (
+                            <option key={category} value={category}>{label}</option>
+                          ))}
                         </select></label>
                       </div>
                       <div className="settings-form-grid">
-                        <label className="field date-field"><span>Tervezett indítás</span><FormDatePicker name="plannedLaunchDate" defaultValue={project.plannedLaunchDate ?? getTodayDateInputValue()} /></label>
+                        <label className="field date-field"><span>Projekt létrehozás</span><FormDatePicker name="projectCreatedOn" defaultValue={project.plannedLaunchDate ?? getTodayDateInputValue()} /></label>
                         {project.status === "live" && <label className="field date-field"><span>Indítás ideje</span><div className="date-input-wrap"><CalendarClock size={16} /><input name="launchedAt" type="datetime-local" defaultValue={project.launchedAtInput ?? ""} /></div></label>}
                       </div>
                       {projectSettingsState.error && <p className="form-error">{projectSettingsState.error}</p>}
@@ -496,11 +529,53 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                       <div className="agent-scorecards project-scorecards">
                         <Scorecard className="project-scorecard wide" icon={FolderKanban} label="Projekt neve" value={project.name} />
                         <Scorecard className="project-scorecard" icon={Layers3} label="Kategória" value={categoryLabels[project.category]} />
-                        <Scorecard className="project-scorecard" icon={CalendarClock} label="Tervezett indítás" value={project.plannedLaunchDate ?? "Nincs megadva"} />
+                        <Scorecard className="project-scorecard" icon={CalendarClock} label="Projekt létrehozás" value={project.plannedLaunchDate ? formatDateFilterValue(project.plannedLaunchDate) : "Nincs megadva"} />
                         {project.status === "live" && <Scorecard className="project-scorecard" icon={CalendarClock} label="Indítás ideje" value={project.launchedAt ?? "Nincs adat"} />}
                         <Scorecard className="project-scorecard" icon={Save} label="Utolsó frissítés" value={project.updatedAt} />
                       </div>
                     </div>
+                  )}
+                  {hasGoogleData && (
+                    <section className="google-account-section">
+                      <div className="google-account-heading">
+                        <h3>Google fiók</h3>
+                        <p>Az ügyfél által korábban megadott technikai Google fiók és biztonságos jelszómegosztó link.</p>
+                      </div>
+                      {!canEditProject && (
+                        <dl className="account-admin-details">
+                          <dt>Google fiók</dt><dd>{project.googleAccountEmail ?? "Nincs megadva"}</dd>
+                          <dt>Státusz</dt><dd>{googleAccessStatusLabels[project.googleAccessStatus]}</dd>
+                        </dl>
+                      )}
+                      {project.googlePasswordShareUrl && (
+                        <a className="secondary-button inline-action-link" href={project.googlePasswordShareUrl} rel="noreferrer" target="_blank">
+                          Link megnyitása <ExternalLink size={15} />
+                        </a>
+                      )}
+                      {canEditProject && (
+                        <form action={googleAccessAction} className="voice-setup-form">
+                          <input name="projectId" type="hidden" value={project.id} />
+                          <input name="customerId" type="hidden" value={adminSettings.customerId} />
+                          <input name="source" type="hidden" value={adminSettings.source} />
+                          <div className="settings-form-grid">
+                            <label className="field"><span>Google technikai fiók e-mail címe</span><input name="googleAccountEmail" defaultValue={project.googleAccountEmail ?? ""} placeholder="asszisztens@cegnev.hu" type="email" /></label>
+                            <label className="field"><span>Google hozzáférés státusz</span><select name="googleAccessStatus" defaultValue={project.googleAccessStatus}>
+                              <option value="not_provided">{googleAccessStatusLabels.not_provided}</option>
+                              <option value="submitted">{googleAccessStatusLabels.submitted}</option>
+                              <option value="checking">{googleAccessStatusLabels.checking}</option>
+                              <option value="working">{googleAccessStatusLabels.working}</option>
+                              <option value="failed">{googleAccessStatusLabels.failed}</option>
+                            </select></label>
+                          </div>
+                          <label className="field"><span>Biztonságos jelszómegosztó link</span><input name="googlePasswordShareUrl" defaultValue={project.googlePasswordShareUrl ?? ""} placeholder="https://..." type="url" /></label>
+                          {googleAccessState.error && <p className="form-error">{googleAccessState.error}</p>}
+                          <div className="settings-actions">
+                            <span className="save-note"><KeyRound size={15} /> Utolsó frissítés: {project.updatedAt}</span>
+                            <button className="button" disabled={googleAccessPending} type="submit">{googleAccessPending ? "Mentés..." : "Google fiók mentése"} <Save size={15} /></button>
+                          </div>
+                        </form>
+                      )}
+                    </section>
                   )}
                 </>
               ) : (
@@ -509,7 +584,7 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                     <div className="agent-scorecards project-scorecards">
                       <Scorecard className="project-scorecard wide" icon={FolderKanban} label="Projekt neve" value={project.name} />
                       <Scorecard className="project-scorecard" icon={Layers3} label="Kategória" value={categoryLabels[project.category]} />
-                      <Scorecard className="project-scorecard" icon={Phone} label="Telefonszám" value={project.phoneNumber ?? "Nincs még létrehozva telefonszám"} />
+                      {!isDeliveryProject && <Scorecard className="project-scorecard" icon={Phone} label="Telefonszám" value={project.phoneNumber ?? "Nincs még létrehozva telefonszám"} />}
                       {project.status === "live" && (
                         <Scorecard className="project-scorecard" icon={CalendarClock} label="Indítás ideje" value={project.launchedAt ?? "Nincs megadva"} />
                       )}
@@ -521,7 +596,7 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                       <input name="projectId" type="hidden" value={project.id} />
                       <div>
                         <strong>Ellenőrzésre küldhető</strong>
-                        <span>A leadás után a norpheus AI csapata ellenőrzi a beállításokat, és előkészíti a következő technikai lépéseket.</span>
+                        <span>{isDeliveryProject ? "A leadás után a norpheus AI csapata áttekinti a projekt adatait, és felveszi veled a kapcsolatot." : "A leadás után a norpheus AI csapata ellenőrzi a beállításokat, és előkészíti a következő technikai lépéseket."}</span>
                       </div>
                       <button className="button" disabled={reviewRequestPending} type="submit">
                         {reviewRequestPending ? "Küldés..." : "Ellenőrzésre küldés"}
@@ -555,11 +630,12 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                   <form action={setupAction} className="voice-setup-form">
                     <input name="projectId" type="hidden" value={project.id} />
                     <div className="settings-form-grid">
-                      <label className="field"><span>Agent neve</span><input name="agentName" required defaultValue={project.agentDisplayName} /></label>
+                      <div className="field-with-toggle"><label className="field"><span>Agent neve</span><input name="agentName" required defaultValue={project.agentDisplayName} /></label>{fieldKeys && <FieldOnboardingToggle disabled={fieldPending} locked={true} onToggle={() => toggleOnboardingField("agentName")} shown={fieldKeys.includes("agentName")} />}</div>
                     </div>
-                    <label className="field"><span>Köszöntés</span><textarea name="greeting" defaultValue={project.greeting} placeholder="Pl. Jó napot kívánok, Anna vagyok, a telefonos asszisztens." /></label>
-                    <label className="field"><span>Alap híváskezelési instrukciók</span><textarea name="callInstructions" defaultValue={project.callInstructions} placeholder="Írd le, milyen kérdésekre válaszolhat, hogyan vegyen fel adatokat, mikor ajánljon visszahívást." rows={6} /></label>
-                    <label className="field"><span>Átadás / eszkaláció</span><textarea name="handoffInstructions" defaultValue={project.handoffInstructions} placeholder="Pl. sürgős ügy, panasz vagy bizonytalan válasz esetén kérjen visszahívási adatokat." rows={4} /></label>
+                    <div className="field-with-toggle"><label className="field"><span>Köszöntés</span><textarea name="greeting" defaultValue={project.greeting} placeholder="Pl. Jó napot kívánok, Anna vagyok, a telefonos asszisztens." /></label>{fieldKeys && <FieldOnboardingToggle disabled={fieldPending} locked={false} onToggle={() => toggleOnboardingField("greeting")} shown={fieldKeys.includes("greeting")} />}</div>
+                    <div className="field-with-toggle"><label className="field"><span>Alap híváskezelési instrukciók</span><textarea name="callInstructions" defaultValue={project.callInstructions} placeholder="Írd le, milyen kérdésekre válaszolhat, hogyan vegyen fel adatokat, mikor ajánljon visszahívást." rows={6} /></label>{fieldKeys && <FieldOnboardingToggle disabled={fieldPending} locked={false} onToggle={() => toggleOnboardingField("callInstructions")} shown={fieldKeys.includes("callInstructions")} />}</div>
+                    <div className="field-with-toggle"><label className="field"><span>Átadás / eszkaláció</span><textarea name="handoffInstructions" defaultValue={project.handoffInstructions} placeholder="Pl. sürgős ügy, panasz vagy bizonytalan válasz esetén kérjen visszahívási adatokat." rows={4} /></label>{fieldKeys && <FieldOnboardingToggle disabled={fieldPending} locked={false} onToggle={() => toggleOnboardingField("handoffInstructions")} shown={fieldKeys.includes("handoffInstructions")} />}</div>
+                    {fieldError && <p className="form-error">{fieldError}</p>}
                     {setupState.error && <p className="form-error">{setupState.error}</p>}
                     {setupState.success && <p className="form-success">{setupState.success}</p>}
                     <div className="settings-actions">
@@ -703,6 +779,16 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
                       <DocumentEmptyNotice message="Még nincs feltöltött tudásbázis dokumentum." />
                     )}
                   </div>
+                  {knowledgeUrls && knowledgeUrls.length > 0 && (
+                    <div className="onboarding-url-block">
+                      <h3>Weboldalak és URL-ek tartalomimporthoz</h3>
+                      <ul className="onboarding-url-list">
+                        {knowledgeUrls.map((item) => (
+                          <li key={item.id}><div><a href={item.url} rel="noopener noreferrer" target="_blank">{item.url}</a>{item.note && <small>{item.note}</small>}</div></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -850,95 +936,123 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
         {activeTab === "usage" && (
           <div className="tab-content">
             <div className="tab-card">
-              <div className="tab-heading">
-                <h2>Felhasznált percek</h2>
-                <p>A beszélgetések hossza alapján számolt havi használat és becsült költség.</p>
-              </div>
-              {conversations?.error && <p className="form-error">Nem sikerült beolvasni a teljes forgalmat. A havi értékek most nem jeleníthetők meg.</p>}
-              {canEditProject && adminSettings && (
-                <form action={minuteLimitsAction} className="usage-limit-form">
-                  <input name="projectId" type="hidden" value={project.id} />
-                  <input name="customerId" type="hidden" value={adminSettings.customerId} />
-                  <div className="settings-form-grid">
-                    <label className="field"><span>Havi keret</span><input min="0" name="monthlyMinuteLimit" type="number" defaultValue={monthlyMinuteLimit} /></label>
-                    <label className="field"><span>Átvihető percek</span><input min="0" name="carryoverMinutes" type="number" defaultValue={carryoverMinutes} /></label>
-                    <label className="field"><span>Percdíj (Ft/perc)</span><input min="0" max="999999.99" step="0.01" name="minuteRateHuf" type="number" defaultValue={project.minuteRateHuf ?? ""} placeholder="Nincs beállítva" /></label>
-                  </div>
-                  {minuteLimitsState.error && <p className="form-error">{minuteLimitsState.error}</p>}
-                  {minuteLimitsState.success && <p className="form-success">{minuteLimitsState.success}</p>}
-                  <div className="settings-actions compact-actions">
-                    <span className="save-note"><Clock3 size={15} /> Alapértelmezett keret: 1000 perc, átvihető: 50%.</span>
-                    <button className="button" disabled={minuteLimitsPending} type="submit">{minuteLimitsPending ? "Mentés..." : "Beállítások mentése"} <Save size={15} /></button>
-                  </div>
-                </form>
-              )}
-              {!conversations?.error && <>
-                <div className="usage-month-picker">
-                  <label className="field">
-                    <span>Hónap</span>
+              <div className="usage-head">
+                <div className="tab-heading">
+                  <h2>Forgalom</h2>
+                  <p>Felhasznált percek, rendelkezésre álló keret és becsült költség.</p>
+                </div>
+                {!conversations?.error && (
+                  <label className="field usage-month-select">
+                    <span>Vizsgált hónap</span>
                     <select value={selectedUsage.key} onChange={(event) => setSelectedUsageMonth(event.target.value)}>
                       {usageSummary.monthItems.map((item) => <option key={item.key} value={item.key}>{getMonthLabel(item.key)}</option>)}
                     </select>
                   </label>
-                  <span>Jelenlegi percdíj: {project.minuteRateHuf === null ? "nincs beállítva" : `${formatCostHuf(project.minuteRateHuf)}/perc`}</span>
-                </div>
+                )}
+              </div>
+              {conversations?.error && <p className="form-error">Nem sikerült beolvasni a teljes forgalmat. A havi értékek most nem jeleníthetők meg.</p>}
+              {!conversations?.error && <>
                 <div className="usage-summary-grid">
-                  <Scorecard icon={Clock3} label="Felhasznált idő" value={formatMinuteValue(selectedUsage.seconds)} />
-                  <Scorecard icon={Banknote} label="Becsült költség" value={formatCostHuf(calculateUsageCostHuf(selectedUsage.seconds, project.minuteRateHuf))} />
-                  <Scorecard icon={MessageSquareText} label="Beszélgetések" value={`${selectedUsage.conversationCount}`} />
-                </div>
-                <p className="usage-cost-note">Összesen {formatMinuteValue(usageSummary.totalSeconds)} · {usageSummary.totalConversationCount} beszélgetés. A költség becslés a jelenlegi percdíjjal és a tényleges másodpercekkel; a korábbi hónapokra is ez a díj érvényes.</p>
-                <div className="usage-summary-grid usage-quota-grid">
-                  <Scorecard icon={Clock3} label="Aktuális havi keret" value={`${monthlyMinuteLimit} perc`} />
-                  <Scorecard icon={CalendarClock} label="Átvihető percek" value={`${carryoverMinutes} perc`} />
-                  <Scorecard icon={CheckCircle2} label="Aktuális maradék" value={availableSeconds > 0 ? formatMinuteValue(remainingSeconds) : "Nincs keret"} />
-                </div>
-
-                <div className="usage-section">
-                  <div className="section-subheading">
-                    <h3>Havi bontás</h3>
-                    <span>{usageSummary.monthItems.length} hónap</span>
+                  <div className="agent-scorecard">
+                    <span><Clock3 size={15} /> Felhasznált idő</span>
+                    <strong>{formatMinuteValue(selectedUsage.seconds)}</strong>
+                    <small>{selectedUsage.conversationCount} beszélgetés ebben a hónapban</small>
                   </div>
-                  <div className="usage-chart" aria-label="Havi perc felhasználás">
-                    {usageSummary.monthItems.map((item) => (
-                      <div className="usage-chart-row" key={item.key}>
-                        <span>{getMonthLabel(item.key)}</span>
-                        <div className="usage-bar-track">
-                          <div className="usage-bar" style={{ width: `${Math.max(3, (item.seconds / usageSummary.maxMonthSeconds) * 100)}%` }} />
-                        </div>
-                        <strong>{formatMinuteValue(item.seconds)}</strong>
-                      </div>
-                    ))}
+                  <div className="agent-scorecard">
+                    <span><CheckCircle2 size={15} /> Aktuális maradék</span>
+                    <strong>{availableSeconds > 0 ? formatMinuteValue(remainingSeconds) : "Nincs keret"}</strong>
+                    <small>Havi keret: {monthlyMinuteLimit} perc · átvihető: {carryoverMinutes} perc</small>
+                  </div>
+                  <div className="agent-scorecard">
+                    <span><Banknote size={15} /> Becsült költség</span>
+                    <strong>{formatCostHuf(calculateUsageCostHuf(selectedUsage.seconds, project.minuteRateHuf))}</strong>
+                    <small>Jelenlegi percdíj: {project.minuteRateHuf === null ? "nincs beállítva" : `${formatCostHuf(project.minuteRateHuf)}/perc`}</small>
                   </div>
                 </div>
-
-                <div className="usage-section">
-                  <div className="section-subheading">
-                    <h3>Lista</h3>
-                    <span>Beszélgetéshossz alapján</span>
-                  </div>
-                  <div className="usage-list">
-                    {usageSummary.monthItems.map((item) => (
-                      <div className="usage-list-row" key={item.key}>
-                        <div>
-                          <strong>{getMonthLabel(item.key)}</strong>
-                          <span>{item.conversationCount} beszélgetés</span>
-                        </div>
-                        <div className="usage-list-values"><span>{formatMinuteValue(item.seconds)}</span><strong>{formatCostHuf(calculateUsageCostHuf(item.seconds, project.minuteRateHuf))}</strong></div>
-                      </div>
-                    ))}
-                    {usageSummary.undatedSeconds > 0 && (
-                      <div className="usage-list-row muted-row">
-                        <div>
-                          <strong>Dátum nélküli beszélgetések</strong>
-                          <span>Az API nem adott kezdési időt</span>
-                        </div>
-                        <span>{formatMinuteValue(usageSummary.undatedSeconds)}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <p className="usage-cost-note">
+                  {project.launchedAtUnix ? `A projekt indulása (${project.launchedAt}) óta: ` : "Az indítás ideje még nincs megadva. Összesen: "}
+                  {formatMinuteValue(usageSummary.totalSeconds)} · {usageSummary.totalConversationCount} beszélgetés
+                </p>
               </>}
+              <div className={`usage-layout${canEditProject && adminSettings ? " has-aside" : ""}`}>
+                {!conversations?.error && (
+                  <div className="usage-main">
+                    <div className="usage-section">
+                      <div className="section-subheading">
+                        <h3>Havi bontás</h3>
+                        <span>{usageSummary.monthItems.length} hónap</span>
+                      </div>
+                      <div className="usage-chart" aria-label="Havi perc felhasználás">
+                        {usageSummary.monthItems.map((item) => (
+                          <div className="usage-chart-row" key={item.key}>
+                            <span>{getMonthLabel(item.key)}{item.key === selectedUsage.key ? " · kiválasztott" : ""}</span>
+                            <div className="usage-bar-track">
+                              <div className="usage-bar" style={{ width: `${Math.max(3, (item.seconds / usageSummary.maxMonthSeconds) * 100)}%` }} />
+                            </div>
+                            <strong>{formatMinuteValue(item.seconds)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="usage-section">
+                      <div className="section-subheading">
+                        <h3>Részletes lista</h3>
+                        <span>Beszélgetéshossz alapján</span>
+                      </div>
+                      <div className="usage-list">
+                        <div className="usage-table-row usage-table-head">
+                          <span>Hónap</span><span>Beszélgetések</span><span>Időtartam</span><span>Becsült költség</span>
+                        </div>
+                        {usageSummary.monthItems.map((item) => (
+                          <div className="usage-table-row" key={item.key}>
+                            <strong>{getMonthLabel(item.key)}</strong>
+                            <span>{item.conversationCount}</span>
+                            <span>{formatMinuteValue(item.seconds)}</span>
+                            <strong>{formatCostHuf(calculateUsageCostHuf(item.seconds, project.minuteRateHuf))}</strong>
+                          </div>
+                        ))}
+                        {usageSummary.undatedSeconds > 0 && (
+                          <div className="usage-table-row muted-row">
+                            <strong>Dátum nélküli beszélgetések</strong>
+                            <span>–</span>
+                            <span>{formatMinuteValue(usageSummary.undatedSeconds)}</span>
+                            <span>–</span>
+                          </div>
+                        )}
+                      </div>
+                      <p className="usage-cost-note">A költség becslés a jelenlegi percdíjjal és a tényleges másodpercekkel; a korábbi hónapokra is ez a díj érvényes.</p>
+                    </div>
+                  </div>
+                )}
+
+                {canEditProject && adminSettings && (
+                  <form action={minuteLimitsAction} className="usage-limit-form usage-aside">
+                    <input name="projectId" type="hidden" value={project.id} />
+                    <input name="customerId" type="hidden" value={adminSettings.customerId} />
+                    <div className="section-subheading">
+                      <h3>Keret és percdíj</h3>
+                      <Settings2 size={16} />
+                    </div>
+                    <p className="usage-cost-note">A havi felhasználási keret és a költségbecslés alapértékei.</p>
+                    <label className="field"><span>Havi keret (perc)</span><input min="0" name="monthlyMinuteLimit" type="number" defaultValue={monthlyMinuteLimit} /></label>
+                    <label className="field"><span>Átvihető percek</span><input min="0" name="carryoverMinutes" type="number" defaultValue={carryoverMinutes} /></label>
+                    <label className="field"><span>Percdíj (Ft/perc)</span><input min="0" max="999999.99" step="0.01" name="minuteRateHuf" type="number" defaultValue={project.minuteRateHuf ?? ""} placeholder="Nincs beállítva" /></label>
+                    <span className="save-note"><Clock3 size={15} /> Alapértelmezett keret: 1000 perc, átvihető: 50%.</span>
+                    <div className="usage-quota-summary">
+                      <strong>Aktuális keret</strong>
+                      <div><span>Aktuális havi keret</span><span>{monthlyMinuteLimit} perc</span></div>
+                      <div><span>Átvihető percek</span><span>{carryoverMinutes} perc</span></div>
+                      <div><strong>Aktuális maradék</strong><strong>{availableSeconds > 0 ? formatMinuteValue(remainingSeconds) : "Nincs keret"}</strong></div>
+                    </div>
+                    {minuteLimitsState.error && <p className="form-error">{minuteLimitsState.error}</p>}
+                    {minuteLimitsState.success && <p className="form-success">{minuteLimitsState.success}</p>}
+                    <div className="settings-actions compact-actions">
+                      <button className="button" disabled={minuteLimitsPending} type="submit">{minuteLimitsPending ? "Mentés..." : "Beállítások mentése"} <Save size={15} /></button>
+                    </div>
+                  </form>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -1084,57 +1198,6 @@ export function ProjectTabs({ adminSettings, project, completion, elevenLabsKnow
           </div>
         )}
 
-        {activeTab === "google-access" && adminSettings && (
-          <div className="tab-content">
-            <div className="tab-card">
-              <div className="tab-heading">
-                <h2>Google hozzáférés</h2>
-                <p>Az ügyfél onboardingban beküldött technikai Google fiók és biztonságos jelszómegosztó link admin kezelése.</p>
-              </div>
-              <div className="agent-scorecards project-scorecards admin-request-cards">
-                <Scorecard className="project-scorecard" icon={Mail} label="Google fiók" value={project.googleAccountEmail ?? "Nincs megadva"} />
-                <Scorecard className="project-scorecard" icon={KeyRound} label="Státusz" value={googleAccessStatusLabels[project.googleAccessStatus]} />
-                <Scorecard className="project-scorecard" icon={CheckCircle2} label="Megadás" value={project.googleAccessRequired ? "Kötelező" : "Nem kötelező"} />
-                <Scorecard className="project-scorecard wide" icon={LinkIcon} label="Jelszómegosztó link" value={project.googlePasswordShareUrl ? "Beküldve" : "Nincs megadva"} />
-              </div>
-              {project.googlePasswordShareUrl && (
-                <a className="secondary-button inline-action-link" href={project.googlePasswordShareUrl} rel="noreferrer" target="_blank">
-                  Link megnyitása <ExternalLink size={15} />
-                </a>
-              )}
-              {canEditProject && (
-                <form action={googleAccessAction} className="voice-setup-form">
-                  <input name="projectId" type="hidden" value={project.id} />
-                  <input name="customerId" type="hidden" value={adminSettings.customerId} />
-                  <input name="source" type="hidden" value={adminSettings.source} />
-                  <div className="settings-form-grid">
-                    <label className="field"><span>Google technikai fiók e-mail címe</span><input name="googleAccountEmail" defaultValue={project.googleAccountEmail ?? ""} placeholder="asszisztens@cegnev.hu" type="email" /></label>
-                    <label className="field"><span>Google hozzáférés státusz</span><select name="googleAccessStatus" defaultValue={project.googleAccessStatus}>
-                      <option value="not_provided">{googleAccessStatusLabels.not_provided}</option>
-                      <option value="submitted">{googleAccessStatusLabels.submitted}</option>
-                      <option value="checking">{googleAccessStatusLabels.checking}</option>
-                      <option value="working">{googleAccessStatusLabels.working}</option>
-                      <option value="failed">{googleAccessStatusLabels.failed}</option>
-                    </select></label>
-                  </div>
-                  <label className="field"><span>Biztonságos jelszómegosztó link</span><input name="googlePasswordShareUrl" defaultValue={project.googlePasswordShareUrl ?? ""} placeholder="https://..." type="url" /></label>
-                  <label className="setting-option">
-                    <div>
-                      <strong>Google hozzáférés kötelező</strong>
-                      <p>Kapcsold ki, ha ennél a projektnél nincs szükség technikai Google fiókra.</p>
-                    </div>
-                    <span className="toggle"><input name="googleAccessRequired" defaultChecked={project.googleAccessRequired} type="checkbox" /><span /></span>
-                  </label>
-                  {googleAccessState.error && <p className="form-error">{googleAccessState.error}</p>}
-                  <div className="settings-actions">
-                    <span className="save-note"><KeyRound size={15} /> Utolsó frissítés: {project.updatedAt}</span>
-                    <button className="button" disabled={googleAccessPending} type="submit">{googleAccessPending ? "Mentés..." : "Google hozzáférés mentése"} <Save size={15} /></button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

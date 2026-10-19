@@ -56,6 +56,7 @@ export type AdminCustomerProject = {
   phoneNumber: string | null;
   phoneRequestType: PhoneRequestType | null;
   phoneDocumentsReceived: boolean;
+  launchedAtIso: string | null;
   googleAccessStatus: GoogleAccessStatus;
   googleAccessRequired: boolean;
   elevenLabsAgentId: string | null;
@@ -101,6 +102,7 @@ type ProjectRow = {
   category: ProjectCategory | null;
   phone_number: string | null;
   phone_request_type: PhoneRequestType | null;
+  launched_at: string | null;
   phone_documents_received: boolean | null;
   google_access_status: GoogleAccessStatus | null;
   google_access_required: boolean | null;
@@ -186,6 +188,7 @@ export const mockAdminCustomers: AdminCustomer[] = [
         category: "voice_agent",
         phoneNumber: "+36 30 555 0142",
         phoneRequestType: "hu_21",
+        launchedAtIso: null,
         phoneDocumentsReceived: true,
         googleAccessStatus: "working",
         googleAccessRequired: true,
@@ -210,6 +213,7 @@ export const mockAdminCustomers: AdminCustomer[] = [
         category: "voice_agent",
         phoneNumber: null,
         phoneRequestType: "local_company",
+        launchedAtIso: null,
         phoneDocumentsReceived: false,
         googleAccessStatus: "not_provided",
         googleAccessRequired: true,
@@ -251,7 +255,7 @@ export async function getAdminCustomers(): Promise<{ adminPermissions: AdminPerm
   const dataClient = createAdminClient() ?? supabase;
   const [{ data: organizations }, { data: projects }, { data: members }, { data: documents }, { data: invoices }] = await Promise.all([
     dataClient.from("organizations").select("id, name, company_name, slug, status, superadmin_only, created_at").is("deleted_at", null).order("created_at", { ascending: false }),
-    dataClient.from("projects").select("id, organization_id, name, agent_display_name, category, phone_number, phone_request_type, phone_documents_received, google_access_status, google_access_required, elevenlabs_agent_id, elevenlabs_agent_status, elevenlabs_agent_error, elevenlabs_agent_created_at, prompt_assets_received, knowledge_assets_received, telnyx_status, status, greeting, call_instructions, updated_at").is("deleted_at", null).order("created_at", { ascending: false }),
+    dataClient.from("projects").select("id, organization_id, name, agent_display_name, category, phone_number, phone_request_type, launched_at, phone_documents_received, google_access_status, google_access_required, elevenlabs_agent_id, elevenlabs_agent_status, elevenlabs_agent_error, elevenlabs_agent_created_at, prompt_assets_received, knowledge_assets_received, telnyx_status, status, greeting, call_instructions, updated_at").is("deleted_at", null).order("created_at", { ascending: false }),
     dataClient.from("org_members").select("id, organization_id, user_id, role, created_at"),
     dataClient.from("documents").select("project_id, processing_status").is("deleted_at", null),
     dataClient.from("invoices").select("id, organization_id, project_id, expected_revenue_id, invoice_number, invoice_type, issued_on, payment_date, status, amount, currency").order("issued_on", { ascending: false }),
@@ -339,6 +343,7 @@ export async function getAdminCustomers(): Promise<{ adminPermissions: AdminPerm
             phoneNumber: project.phone_number,
             phoneRequestType: project.phone_request_type,
             phoneDocumentsReceived: project.phone_documents_received ?? false,
+            launchedAtIso: project.launched_at ?? null,
             googleAccessStatus: project.google_access_status ?? "not_provided",
             googleAccessRequired: project.google_access_required ?? true,
             elevenLabsAgentId: project.elevenlabs_agent_id,

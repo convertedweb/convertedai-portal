@@ -1,11 +1,11 @@
-import { CirclePause } from "lucide-react";
+import { CirclePause, Plus } from "lucide-react";
 import Link from "next/link";
 import { getAdminProjects } from "@/lib/admin-data";
 import { canViewProjects, getAdminRoleLabel } from "@/lib/admin-permissions";
 import { AdminProjectsTable } from "./admin-projects-table";
 
 export default async function AdminProjectsPage() {
-  const { adminPermissions, adminRole, isAdmin, projects, userEmail } = await getAdminProjects();
+  const { adminPermissions, adminRole, canManageProjects, isAdmin, projects, userEmail } = await getAdminProjects();
   const roleLabel = getAdminRoleLabel(adminRole);
   const activeProjects = projects.filter((project) => project.status === "live").length;
   const archivedProjects = projects.filter((project) => project.status === "archived").length;
@@ -47,8 +47,9 @@ export default async function AdminProjectsPage() {
         <div>
           <p className="eyebrow">{roleLabel}</p>
           <h1>Projektek</h1>
-          <p className="intro-copy">Az összes ügyfélhez tartozó voice agent és automatizációs projekt egy helyen.</p>
+          <p className="intro-copy">Az ügyfelek projektjei egy helyen.</p>
         </div>
+        {canManageProjects && <Link className="button" href="/admin/projects/new"><Plus size={16} /> Új projekt</Link>}
       </div>
 
       <div className="stats">

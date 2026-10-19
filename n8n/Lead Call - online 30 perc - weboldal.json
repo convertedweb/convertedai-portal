@@ -1,0 +1,1692 @@
+{
+  "name": "Lead Call - online 30 perc",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "facebook-lead-save-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a82fad52-96e3-4f5d-a3d8-363632cfdb2b",
+      "name": "saveIntake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        5392,
+        -752
+      ],
+      "webhookId": "facebook-lead-save-intake"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ZONE = 'Europe/Budapest';\n\nfunction parts(date) {\n  return Object.fromEntries(\n    new Intl.DateTimeFormat('en-CA', {\n      timeZone: ZONE,\n      year: 'numeric',\n      month: '2-digit',\n      day: '2-digit',\n      hour: '2-digit',\n      minute: '2-digit',\n      second: '2-digit',\n      hourCycle: 'h23',\n    })\n      .formatToParts(new Date(date))\n      .map((p) => [p.type, p.value]),\n  );\n}\n\nfunction localDate(y, m, d, h = 0, min = 0) {\n  const target = Date.UTC(y, m - 1, d, h, min);\n  let guess = target;\n\n  for (let i = 0; i < 4; i++) {\n    const p = parts(guess);\n    const wall = Date.UTC(\n      Number(p.year),\n      Number(p.month) - 1,\n      Number(p.day),\n      Number(p.hour),\n      Number(p.minute),\n      Number(p.second),\n    );\n\n    const diff = target - wall;\n\n    if (!diff) return new Date(guess);\n\n    guess += diff;\n  }\n\n  throw Error('Nem egyértelmű helyi időpont.');\n}\n\nfunction timestamp(value) {\n  if (typeof value !== 'string') return NaN;\n\n  const m = value.match(\n    /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d{1,3})?(Z|[+-]\\d{2}:\\d{2})$/,\n  );\n\n  if (!m) return NaN;\n\n  const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);\n  const civil = new Date(Date.UTC(y, mo - 1, d));\n\n  if (\n    civil.getUTCFullYear() !== y ||\n    civil.getUTCMonth() !== mo - 1 ||\n    civil.getUTCDate() !== d ||\n    h > 23 ||\n    mi > 59 ||\n    s > 59\n  ) {\n    return NaN;\n  }\n\n  return Date.parse(value);\n}\n\nfunction eventTime(value) {\n  if (value?.dateTime) return timestamp(value.dateTime);\n\n  if (value?.date) {\n    const [y, m, d] = value.date.split('-').map(Number);\n    return Number(localDate(y, m, d));\n  }\n\n  return NaN;\n}\n\nfunction format(value) {\n  const p = parts(value);\n  return `${p.year}.${p.month}.${p.day}. ${p.hour}:${p.minute}`;\n}\n\nconst BOOKING_POLICY = {\n  version: 'google-2026-09-23',\n  minLeadHours: 4,\n  maxDays: 60,\n  durationMinutes: 30,\n  bufferMinutes: 30,\n  maxBookingsPerDay: 5,\n};\n\nfunction dayKey(ms) {\n  const p = parts(ms);\n  return `${p.year}-${p.month}-${p.day}`;\n}\n\nfunction policyError(start, end, now = Date.now()) {\n  if (!Number.isFinite(start) || !Number.isFinite(end)) {\n    return 'invalid_datetime';\n  }\n\n  if (start < now + 4 * 60 * 60 * 1000) {\n    return 'minimum_4_hours_notice';\n  }\n\n  const today = parts(now);\n\n  const horizon =\n    Number(\n      localDate(\n        Number(today.year),\n        Number(today.month),\n        Number(today.day) + 60,\n        Number(today.hour),\n        Number(today.minute),\n      ),\n    ) +\n    Number(today.second) * 1000;\n\n  if (start > horizon) return 'maximum_60_days_notice';\n\n  if (end - start !== 30 * 60 * 1000) {\n    return 'duration_must_be_30_minutes';\n  }\n\n  const p = parts(start);\n  const day = new Date(\n    Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day)),\n  ).getUTCDay();\n\n  const minute = Number(p.hour) * 60 + Number(p.minute);\n\n  if (\n    ![1, 2, 3, 4, 5].includes(day) ||\n    minute < 570 ||\n    minute > 930 ||\n    (minute - 570) % 60 ||\n    Number(p.second) ||\n    start % 1000\n  ) {\n    return 'outside_google_booking_grid';\n  }\n\n  return null;\n}\n\nconst b = $json.body ?? $json;\n\nconst text = (value, max = 2000) =>\n  String(value ?? '')\n    .trim()\n    .slice(0, max);\n\nconst missing = [\n  'name',\n  'email',\n  'phone',\n  'consultation_start',\n  'consultation_end',\n].filter((key) => !text(b[key]));\n\nconst lead_id = text(b.lead_id).replace(/^l:/, '');\nconst conversation_id = text(b.conversation_id);\n\nif (lead_id.length > 200 || conversation_id.length > 200) {\n  missing.push('identifier_invalid');\n}\n\nconst email = text(b.email).toLowerCase();\nconst phone = text(b.phone);\n\nif (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {\n  missing.push('email_invalid');\n}\n\nconst start = timestamp(b.consultation_start);\nconst end = timestamp(b.consultation_end);\n\nif (!Number.isFinite(start) || !Number.isFinite(end)) {\n  missing.push('datetime_with_timezone_required');\n} else {\n  const issue = policyError(start, end);\n\n  if (issue) {\n    missing.push(issue);\n  }\n}\n\nif (missing.length) {\n  return [\n    {\n      json: {\n        success: false,\n        http_status: 422,\n        error: 'validation_failed',\n        missing,\n        message:\n          'Hiányzó vagy érvénytelen adatok: ' + missing.join(', '),\n      },\n    },\n  ];\n}\n\nconst company = text(b.company || b.company_name);\n\nconst call_handling_problem = text(\n  b.call_handling_problem || b.interested_solution,\n);\n\nconst industry = text(b.industry);\n\nconst monthly_budget = text(b.monthly_budget);\n\nconst decision_role = text(b.decision_role);\n\nconst desired_timing = text(b.desired_timing);\n\nreturn [\n  {\n    json: {\n      success: true,\n\n      lead_id,\n      conversation_id,\n\n      name: text(b.name),\n      lead_name: text(b.name),\n\n      email,\n      phone,\n\n      company,\n      company_name: company,\n\n      call_handling_problem,\n      interested_solution: call_handling_problem,\n\n      industry,\n      monthly_budget,\n      decision_role,\n      desired_timing,\n\n      brief: text(b.brief),\n\n      consultation_start_iso: new Date(start).toISOString(),\n      consultation_end_iso: new Date(end).toISOString(),\n\n      calendar_query_start: localDate(\n        Number(parts(start).year),\n        Number(parts(start).month),\n        Number(parts(start).day),\n      ).toISOString(),\n\n      calendar_query_end: localDate(\n        Number(parts(start).year),\n        Number(parts(start).month),\n        Number(parts(start).day) + 1,\n      ).toISOString(),\n\n      calendar_event_start_email: format(start),\n      calendar_event_end_email: format(end),\n\n      created_at_iso: new Date().toISOString(),\n    },\n  },\n];"
+      },
+      "id": "7dfee3a6-2bfb-47a2-afa3-c43167ec9f3d",
+      "name": "Normalize intake",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5632,
+        -752
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid-intake",
+              "leftValue": "={{$json.success}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f246d56a-6e70-47d8-8b0e-fc65e61b881a",
+      "name": "Intake valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5392,
+        -496
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8",
+          "mode": "list",
+          "cachedResultName": "AI recepcios 02",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8/edit?usp=sharing"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "leads",
+          "mode": "name",
+          "cachedResultName": "leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{$json.id}}",
+            "status": "confirmed",
+            "conversation_id": "={{$json.conversation_id}}",
+            "calendar_event_id": "={{$json.calendar_event_id}}",
+            "booking_link": "={{$json.booking_link}}",
+            "consultation_start_iso": "={{$json.consultation_start_iso}}",
+            "consultation_end_iso": "={{$json.consultation_end_iso}}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "consultation_start_iso",
+              "displayName": "consultation_start_iso",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "consultation_end_iso",
+              "displayName": "consultation_end_iso",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "calendar_event_id",
+              "displayName": "calendar_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "booking_link",
+              "displayName": "booking_link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "b6b26a05-5a02-4459-aeae-36237513d55d",
+      "name": "Update lead booking in Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        7488,
+        -256
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "twL7qLUNIo1nyie5",
+          "name": "CONVERTEDWEB - Google Service"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$('Prepare confirmation').first().json.email}}",
+        "subject": "ConvertedWeb - Konzultációs időpont visszaigazolása",
+        "emailType": "text",
+        "message": "={{ 'Kedves ' + $('Prepare confirmation').first().json.name + '!\\n\\nA 30 perces online konzultáció időpontja: ' + $('Prepare confirmation').first().json.calendar_event_start_email + ' (budapesti idő).\\n' + ($('Prepare confirmation').first().json.booking_link ? 'Google Meet: ' + $('Prepare confirmation').first().json.booking_link : 'A Google Meet-link még készül; kérjük, ellenőrizze a naptármeghívót.') + '\\n\\nHa az időpontot módosítaná vagy lemondaná, válaszoljon erre az emailre.\\n\\nÜdvözlettel: ConvertedWeb' }}",
+        "options": {}
+      },
+      "id": "bae94121-67f1-430c-bf03-017440a8f628",
+      "name": "Email consultation confirmation to caller",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        7760,
+        16
+      ],
+      "webhookId": "email-booking-link-to-caller",
+      "retryOnFail": false,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "r4oEPgpMc7kSM1wA",
+          "name": "CONVERTEDWEB - Gmail"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": "={{$json.http_status || ($json.success ? 200 : 422)}}"
+        }
+      },
+      "id": "57cb2e02-d236-493f-876e-f273ff9fa17c",
+      "name": "Respond saveIntake success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        8304,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": "={{$json.http_status || ($json.success ? 200 : 422)}}"
+        }
+      },
+      "id": "2e01de48-9293-4cfe-9376-9f4f0d73db1f",
+      "name": "Respond saveIntake error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        5392,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "facebook-lead-check-availability",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a0739765-ced6-47ce-82a2-5af2b7788082",
+      "name": "checkAvailability Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        5392,
+        544
+      ],
+      "webhookId": "facebook-lead-check-availability"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst ZONE = 'Europe/Budapest';\nfunction parts(date) { return Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(date)).map(p=>[p.type,p.value])); }\nfunction localDate(y,m,d,h=0,min=0) {\n  const target=Date.UTC(y,m-1,d,h,min); let guess=target;\n  for(let i=0;i<4;i++) {const p=parts(guess); const wall=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const diff=target-wall;if(!diff)return new Date(guess);guess+=diff;}\n  throw Error('Nem egyértelmű helyi időpont.');\n}\nfunction timestamp(value) {\n  if(typeof value !== 'string') return NaN;\n  const m=value.match(/^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d{1,3})?(Z|[+-]\\d{2}:\\d{2})$/);\n  if(!m) return NaN;\n  const [y,mo,d,h,mi,s]=m.slice(1,7).map(Number), civil=new Date(Date.UTC(y,mo-1,d));\n  if(civil.getUTCFullYear()!==y||civil.getUTCMonth()!==mo-1||civil.getUTCDate()!==d||h>23||mi>59||s>59) return NaN;\n  return Date.parse(value);\n}\nfunction eventTime(value) {\n  if(value?.dateTime) return timestamp(value.dateTime);\n  if(value?.date) {const [y,m,d]=value.date.split('-').map(Number);return +localDate(y,m,d);}\n  return NaN;\n}\nfunction busy(events,start,end) {\n  for(const e of events) {\n    if(e.error) throw Error('calendar_unavailable');\n    if(!Object.keys(e).length||e.status==='cancelled'||e.transparency==='transparent') continue;\n    const a=eventTime(e.start),b=eventTime(e.end);\n    if(!Number.isFinite(a)||!Number.isFinite(b)||b<=a) throw Error('invalid_calendar_event');\n    if(start<b&&end>a) return true;\n  } return false;\n}\nfunction format(value) { const p=parts(value);return p.year+'.'+p.month+'.'+p.day+'. '+p.hour+':'+p.minute; }\n\nconst BOOKING_POLICY = {version:'google-2026-09-23', minLeadHours:4, maxDays:60, durationMinutes:30, bufferMinutes:30, maxBookingsPerDay:5};\nfunction dayKey(ms) {const p=parts(ms);return p.year+'-'+p.month+'-'+p.day;}\nfunction policyError(start,end,now=Date.now()) {\n  if(!Number.isFinite(start)||!Number.isFinite(end))return 'invalid_datetime';\n  if(start<now+4*3600000)return 'minimum_4_hours_notice';\n  const today=parts(now);\n  const horizon=+localDate(+today.year,+today.month,+today.day+60,+today.hour,+today.minute)+Number(today.second)*1000;\n  if(start>horizon)return 'maximum_60_days_notice';\n  if(end-start!==30*60000)return 'duration_must_be_30_minutes';\n  const p=parts(start),day=new Date(Date.UTC(+p.year,+p.month-1,+p.day)).getUTCDay(),minute=+p.hour*60 + +p.minute;\n  if(![1,2,3,4,5].includes(day)||minute<570||minute>930||(minute-570)%60||+p.second||start%1000)return 'outside_google_booking_grid';\n  return null;\n}\nfunction bookingEvent(e) {\n  return /30 min with ConvertedWeb|Online konzultáció|Konzultáció -/i.test(String(e.summary||''));\n}\nfunction policyAvailable(events,start,end,now=Date.now()) {\n  if(policyError(start,end,now))return false;\n  let count=0,conflict=false;\n  for(const e of events) {\n    if(e.error)throw Error('calendar_unavailable');\n    if(!Object.keys(e).length||e.status==='cancelled')continue;\n    const a=eventTime(e.start),b=eventTime(e.end);\n    if(!Number.isFinite(a)||!Number.isFinite(b)||b<=a)throw Error('invalid_calendar_event');\n    const appointment=bookingEvent(e);\n    if(appointment&&dayKey(a)===dayKey(start))count++;\n    if(e.transparency==='transparent')continue;\n    const buffer=appointment?30*60000:0;\n    if(start<b+buffer&&end>a-buffer)conflict=true;\n  }\n  return !conflict&&count<5;\n}\n\nconst body = $json.body ?? $json;\nconst preferredTime = String(body.preferredTime ?? '');\n\nconst now = new Date();\nconst timeZone = 'Europe/Budapest';\n\nfunction partsInBudapest(date) {\n  const parts = new Intl.DateTimeFormat('en-CA', {\n    timeZone,\n    year: 'numeric',\n    month: '2-digit',\n    day: '2-digit',\n    weekday: 'short',\n  }).formatToParts(date);\n  return Object.fromEntries(parts.map((p) => [p.type, p.value]));\n}\n\nfunction makeBudapestDate(year,month,day,hour,minute) { return localDate(year,month,day,hour,minute); }\n\nfunction spokenFor(date) {\n  const parts = new Intl.DateTimeFormat('hu-HU', {\n    timeZone,\n    year: 'numeric',\n    month: '2-digit',\n    day: '2-digit',\n    hour: '2-digit',\n    minute: '2-digit',\n    hour12: false,\n  }).formatToParts(date);\n  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));\n  return byType.year + '.' + byType.month + '.' + byType.day + '. ' + byType.hour + ':' + byType.minute;\n}\n\n// --- Preferred-time parsing (Hungarian, best-effort) ---\n// A hívó preferenciáját NEM a modell számolja ki, hanem itt, a backendben,\n// egyszerű kulcsszó-illesztéssel — így a checkAvailability a legközelebbi\n// releváns napokat tudja előnyben részesíteni, nem csak a naptárilag legkorábbit.\nfunction parsePreferredHint(text) {\n  if (!text) return { weekOffset: 0, targetWeekday: null, dayOffset: null, timeOfDay: null };\n  const lower = text.toLowerCase();\n\n  const weekdayMap = {\n    'hétfő': 1, 'hétfőn': 1,\n    'kedd': 2, 'kedden': 2,\n    'szerda': 3, 'szerdán': 3,\n    'csütörtök': 4, 'csütörtökön': 4,\n    'péntek': 5, 'pénteken': 5,\n    'szombat': 6, 'szombaton': 6,\n    'vasárnap': 0,\n  };\n\n  let weekOffset = 0;\n  if (/két\\s*hét|2\\s*hét/.test(lower)) weekOffset = 2;\n  else if (/jövő\\s*hét|következő\\s*hét|jövőhét/.test(lower)) weekOffset = 1;\n\n  let targetWeekday = null;\n  for (const [word, day] of Object.entries(weekdayMap)) {\n    if (lower.includes(word)) { targetWeekday = day; break; }\n  }\n\n  let dayOffset = null;\n  if (/holnapután/.test(lower)) dayOffset = 2;\n  else if (/holnap/.test(lower)) dayOffset = 1;\n  else if (/\\bma\\b/.test(lower)) dayOffset = 0;\n\n  const timeOfDay = /délután/.test(lower) ? 'afternoon'\n    : /délelőtt|reggel/.test(lower) ? 'morning'\n    : null;\n\n  return { weekOffset, targetWeekday, dayOffset, timeOfDay };\n}\n\nconst hint = parsePreferredHint(preferredTime);\n\n// A hívó szavaiból becsült célnap (csak dátum-eltolás becslés, nem pontos —\n// a Filter free slots node ezt csak a rendezéshez/rangsoroláshoz használja,\n// sosem szűr ki vele érvényes, szabad időpontot).\nlet preferredDayOffsetGuess = null;\nif (hint.dayOffset !== null) {\n  preferredDayOffsetGuess = hint.dayOffset;\n} else if (hint.targetWeekday !== null) {\n  const today=parts(now); const nowWeekday = new Date(Date.UTC(+today.year,+today.month-1,+today.day)).getUTCDay(); // 0=Sun..6=Sat\n\n  if (hint.weekOffset > 0) {\n    // Explicit \"jövő hét\" / \"X hét múlva\" + konkrét nap: a célhét (naptári, hétfőtől\n    // induló) adott napjára számolunk — NEM a legközelebbi előfordulás + plusz hét,\n    // mert ha a legközelebbi előfordulás már úgyis a következő naptári hétre esik\n    // (pl. csütörtökön hívnak és keddet mondanak), a régi képlet duplán számolta a hetet.\n    const daysSinceMonday = (nowWeekday + 6) % 7; // Mon=0..Sun=6\n    const targetWeekMondayOffset = -daysSinceMonday + hint.weekOffset * 7;\n    const targetWeekdayFromMonday = (hint.targetWeekday + 6) % 7; // Mon=0..Sun=6\n    preferredDayOffsetGuess = targetWeekMondayOffset + targetWeekdayFromMonday;\n  } else {\n    // Nincs explicit hét-eltolás — a legközelebbi jövőbeli előfordulást értjük.\n    let diff = (hint.targetWeekday - nowWeekday + 7) % 7;\n    if (diff === 0) diff = 7; // \"kedd\" hallatán mindig a következő keddet értjük, nem a mait\n    preferredDayOffsetGuess = diff;\n  }\n} else if (hint.weekOffset > 0) {\n  preferredDayOffsetGuess = hint.weekOffset * 7;\n}\n\n// --- Candidate generation: több hétre kiterjesztve, nem csak a legközelebbi napra ---\n// Korábban a ciklus 12 jelöltnél (= 1 nap összes időpontja) leállt, így a preferredTime\n// gyakorlatilag sosem tudott hatni. Most a keresés a teljes 60 napos ablakot végigjárja,\n// és minden hétköznapról összegyűjti a jövőbeli időpontokat.\nconst starts = [];\nconst MAX_CANDIDATES = 61 * 7; // A teljes 60 napos keresési ablak minden félórás jelöltje.\nfor (let add = 0; add <= 60 && starts.length < MAX_CANDIDATES; add++) {\n  const todayParts=partsInBudapest(now); const d = new Date(+localDate(+todayParts.year,+todayParts.month,+todayParts.day+add,12,0));\n  const parts = partsInBudapest(d);\n  const year = Number(parts.year);\n  const month = Number(parts.month);\n  const day = Number(parts.day);\n  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();\n  if (![1, 2, 3, 4, 5].includes(weekday)) continue;\n\n  const candidateTimes = [[9,30],[10,30],[11,30],[12,30],[13,30],[14,30],[15,30]];\n\n  for (const [hour, minute] of candidateTimes) {\n    const start = makeBudapestDate(year, month, day, hour, minute);\n    if (policyError(+start,+start+30*60000,+now)) continue;\n    const end = new Date(start.getTime() + 30 * 60 * 1000);\n    starts.push({ start, end, dayOffset: add });\n    if (starts.length >= MAX_CANDIDATES) break;\n  }\n}\n\nreturn [{\n  json: {\n    excludedStarts: String(body.excludedStarts || \"\").split(\",\").map(s=>s.trim()).filter(Boolean),\n    preferredTime,\n    preferredDayOffsetGuess,\n    preferredTimeOfDay: hint.timeOfDay,\n    timeMin: localDate(+parts(now).year,+parts(now).month,+parts(now).day).toISOString(),\n    timeMax: localDate(+parts(now).year,+parts(now).month,+parts(now).day+61).toISOString(),\n    bookingPolicy: BOOKING_POLICY,\n    candidateSlots: starts.map((slot) => ({\n      start: slot.start.toISOString(),\n      end: slot.end.toISOString(),\n      spoken: spokenFor(slot.start),\n      dayOffset: slot.dayOffset,\n    })),\n  },\n}];"
+      },
+      "id": "8e12ac77-7b02-42a0-9ea4-97c33c53d73e",
+      "name": "Build consultation candidate slots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5648,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "convertedweb@gmail.com",
+          "mode": "list",
+          "cachedResultName": "convertedweb@gmail.com"
+        },
+        "returnAll": true,
+        "timeMin": "={{$json.timeMin}}",
+        "timeMax": "={{$json.timeMax}}",
+        "options": {
+          "orderBy": "startTime",
+          "recurringEventHandling": "expand",
+          "timeZone": {
+            "__rl": true,
+            "value": "Europe/Budapest",
+            "mode": "id"
+          }
+        }
+      },
+      "id": "2a0fbc67-3386-4b3b-9b8e-d784817a2a36",
+      "name": "Get consultation calendar events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        5904,
+        544
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "kaLMn1u5LQ4JPDL6",
+          "name": "Google Calendar account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst ZONE = 'Europe/Budapest';\nfunction parts(date) { return Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(date)).map(p=>[p.type,p.value])); }\nfunction localDate(y,m,d,h=0,min=0) {\n  const target=Date.UTC(y,m-1,d,h,min); let guess=target;\n  for(let i=0;i<4;i++) {const p=parts(guess); const wall=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const diff=target-wall;if(!diff)return new Date(guess);guess+=diff;}\n  throw Error('Nem egyértelmű helyi időpont.');\n}\nfunction timestamp(value) {\n  if(typeof value !== 'string') return NaN;\n  const m=value.match(/^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d{1,3})?(Z|[+-]\\d{2}:\\d{2})$/);\n  if(!m) return NaN;\n  const [y,mo,d,h,mi,s]=m.slice(1,7).map(Number), civil=new Date(Date.UTC(y,mo-1,d));\n  if(civil.getUTCFullYear()!==y||civil.getUTCMonth()!==mo-1||civil.getUTCDate()!==d||h>23||mi>59||s>59) return NaN;\n  return Date.parse(value);\n}\nfunction eventTime(value) {\n  if(value?.dateTime) return timestamp(value.dateTime);\n  if(value?.date) {const [y,m,d]=value.date.split('-').map(Number);return +localDate(y,m,d);}\n  return NaN;\n}\nfunction busy(events,start,end) {\n  for(const e of events) {\n    if(e.error) throw Error('calendar_unavailable');\n    if(!Object.keys(e).length||e.status==='cancelled'||e.transparency==='transparent') continue;\n    const a=eventTime(e.start),b=eventTime(e.end);\n    if(!Number.isFinite(a)||!Number.isFinite(b)||b<=a) throw Error('invalid_calendar_event');\n    if(start<b&&end>a) return true;\n  } return false;\n}\nfunction format(value) { const p=parts(value);return p.year+'.'+p.month+'.'+p.day+'. '+p.hour+':'+p.minute; }\n// A naptárlekérdezés befejezése után minden visszaadott eseményt ellenőrzünk.\n\nconst BOOKING_POLICY = {version:'google-2026-09-23', minLeadHours:4, maxDays:60, durationMinutes:30, bufferMinutes:30, maxBookingsPerDay:5};\nfunction dayKey(ms) {const p=parts(ms);return p.year+'-'+p.month+'-'+p.day;}\nfunction policyError(start,end,now=Date.now()) {\n  if(!Number.isFinite(start)||!Number.isFinite(end))return 'invalid_datetime';\n  if(start<now+4*3600000)return 'minimum_4_hours_notice';\n  const today=parts(now);\n  const horizon=+localDate(+today.year,+today.month,+today.day+60,+today.hour,+today.minute)+Number(today.second)*1000;\n  if(start>horizon)return 'maximum_60_days_notice';\n  if(end-start!==30*60000)return 'duration_must_be_30_minutes';\n  const p=parts(start),day=new Date(Date.UTC(+p.year,+p.month-1,+p.day)).getUTCDay(),minute=+p.hour*60 + +p.minute;\n  if(![1,2,3,4,5].includes(day)||minute<570||minute>930||(minute-570)%60||+p.second||start%1000)return 'outside_google_booking_grid';\n  return null;\n}\nfunction bookingEvent(e) {\n  return /30 min with ConvertedWeb|Online konzultáció|Konzultáció -/i.test(String(e.summary||''));\n}\nfunction policyAvailable(events,start,end,now=Date.now()) {\n  if(policyError(start,end,now))return false;\n  let count=0,conflict=false;\n  for(const e of events) {\n    if(e.error)throw Error('calendar_unavailable');\n    if(!Object.keys(e).length||e.status==='cancelled')continue;\n    const a=eventTime(e.start),b=eventTime(e.end);\n    if(!Number.isFinite(a)||!Number.isFinite(b)||b<=a)throw Error('invalid_calendar_event');\n    const appointment=bookingEvent(e);\n    if(appointment&&dayKey(a)===dayKey(start))count++;\n    if(e.transparency==='transparent')continue;\n    const buffer=appointment?30*60000:0;\n    if(start<b+buffer&&end>a-buffer)conflict=true;\n  }\n  return !conflict&&count<5;\n}\n\nconst built = $('Build consultation candidate slots').first().json;\nconst candidates = built.candidateSlots ?? [];\nconst events = $('Get consultation calendar events').all().map((item) => item.json);\nconst preferredDayOffsetGuess = built.preferredDayOffsetGuess;\nconst preferredTimeOfDay = built.preferredTimeOfDay;\n\nfunction eventStart(event) {\n  return event.start?.dateTime ?? event.start?.date ?? event.start;\n}\nfunction eventEnd(event) {\n  return event.end?.dateTime ?? event.end?.date ?? event.end;\n}\nfunction overlaps(aStart, aEnd, bStart, bEnd) {\n  return new Date(aStart) < new Date(bEnd) && new Date(aEnd) > new Date(bStart);\n}\n\nlet free;\ntry {\n  const all=events;\n  const excluded=new Set((built.excludedStarts||[]).map(Date.parse));\n  free=candidates.filter(slot=>!excluded.has(Date.parse(slot.start))&&policyAvailable(all,Date.parse(slot.start),Date.parse(slot.end)));\n} catch(e) {return [{json:{success:false,http_status:503,slots:[],message:'A naptár nem ellenőrizhető. Ne ajánljon időpontot; próbálja újra később.'}}];}\n\n// Rangsorolás a hívó preferenciájához (nap, majd délelőtt/délután) —\n// csak a SORRENDET módosítja a kronologikus alapértelmezetthez képest,\n// szabad időpontot sosem zár ki. Ha nincs értelmezhető preferencia,\n// az eredeti, kronologikus sorrend marad (legkorábbi elöl).\nfunction timeOfDayMatches(slot) {\n  if (!preferredTimeOfDay) return true;\n  const hour = Number(parts(slot.start).hour);\n  return preferredTimeOfDay === 'afternoon' ? hour >= 12 : hour < 12;\n}\n\nlet ranked = free;\nif (preferredDayOffsetGuess !== null && preferredDayOffsetGuess !== undefined) {\n  ranked = [...free].sort((a, b) => {\n    const distA = Math.abs(a.dayOffset - preferredDayOffsetGuess);\n    const distB = Math.abs(b.dayOffset - preferredDayOffsetGuess);\n    if (distA !== distB) return distA - distB;\n    const timeMatchA = timeOfDayMatches(a) ? 0 : 1;\n    const timeMatchB = timeOfDayMatches(b) ? 0 : 1;\n    if (timeMatchA !== timeMatchB) return timeMatchA - timeMatchB;\n    return new Date(a.start) - new Date(b.start);\n  });\n} else if (preferredTimeOfDay) {\n  ranked = [...free].sort((a, b) => {\n    const timeMatchA = timeOfDayMatches(a) ? 0 : 1;\n    const timeMatchB = timeOfDayMatches(b) ? 0 : 1;\n    if (timeMatchA !== timeMatchB) return timeMatchA - timeMatchB;\n    return new Date(a.start) - new Date(b.start);\n  });\n}\n\nconst first=ranked[0];\nconst second=first && (preferredDayOffsetGuess==null ? ranked.find(s=>s.dayOffset!==first.dayOffset) || ranked[1] : ranked[1]);\nconst top2=[first,second].filter(Boolean).map(({start,end,spoken})=>({start,end,spoken}));\n\nreturn [{\n  json: {\n    success: top2.length > 0,\n    slots: top2,\n    message: top2.length > 0\n      ? 'Szabad időpontok lekérdezve.'\n      : 'A következő 60 napban nincs megfelelő szabad időpont. Kérjen más időpontpreferenciát; ne ígérjen foglalást vagy booking linket.',\n  },\n}];"
+      },
+      "id": "980c5633-e1b7-4bd0-8164-da3076ab5fc1",
+      "name": "Filter free slots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6144,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": "={{$json.http_status || 200}}"
+        }
+      },
+      "id": "2cc8bd7f-38d7-49b6-9b83-2486a8fe9f84",
+      "name": "Respond checkAvailability",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        6384,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "convertedweb@gmail.com",
+          "mode": "list",
+          "cachedResultName": "convertedweb@gmail.com"
+        },
+        "start": "={{$node[\"Normalize intake\"].json.consultation_start_iso}}",
+        "end": "={{$node[\"Normalize intake\"].json.consultation_end_iso}}",
+        "additionalFields": {
+          "attendees": [
+            "={{$node[\"Normalize intake\"].json.email}}"
+          ],
+          "conferenceDataUi": {
+            "conferenceDataValues": {
+              "conferenceSolution": "hangoutsMeet"
+            }
+          },
+          "description": "=Név: {{$node[\"Normalize intake\"].json.name}}\nTelefon: {{$node[\"Normalize intake\"].json.phone}}\nEmail: {{$node[\"Normalize intake\"].json.email}}\nCég: {{$node[\"Normalize intake\"].json.company}}\nTelefonhívások problémája: {{$node[\"Normalize intake\"].json.call_handling_problem}}\nVállalkozási terület: {{$node[\"Normalize intake\"].json.industry}}\nMegoldás keresésének időzítése: {{$node[\"Normalize intake\"].json.desired_timing}}\nHavi keret: {{$node[\"Normalize intake\"].json.monthly_budget}}\nDöntési szerep: {{$node[\"Normalize intake\"].json.decision_role}}\n\nÖsszefoglaló:\n{{$node[\"Normalize intake\"].json.brief}}",
+          "sendUpdates": "all",
+          "summary": "=Online konzultáció – {{$node[\"Normalize intake\"].json.name}} – 30 perc"
+        }
+      },
+      "id": "fcd09c83-3c28-428c-a81f-6826a9005521",
+      "name": "Create consultation calendar event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        6336,
+        -528
+      ],
+      "retryOnFail": false,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "kaLMn1u5LQ4JPDL6",
+          "name": "Google Calendar account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst base=$('Normalize intake').first().json;\nconst event=$json;\nconst ok=!!event.id&&!event.error;\nconst link=ok ? (event.hangoutLink||event.conferenceData?.entryPoints?.find(x=>x.entryPointType==='video')?.uri||'') : '';\nreturn [{json:{...base,success:ok,\n  http_status:ok?200:503,status:ok?'confirmed':'unknown',calendar_event_id:ok?event.id:'',booking_link:link,\n  calendar_event_html_link:ok?(event.htmlLink||''):'',booking_link_sent:false,email_sent_to_caller:false,\n  message:ok?'A 30 perces online konzultáció rögzítve.':'A naptár válasza bizonytalan. Ne próbáljon új foglalást létrehozni; kézi ellenőrzés szükséges.',\n  warnings:ok&&!link?['A Meet-link még nem érhető el; ellenőrizze a naptáreseményt.']:[]}}];\n"
+      },
+      "id": "bf490e3b-bd75-4135-a705-c9c6ad4b2cce",
+      "name": "Prepare consultation row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6336,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().flatMap((item, index) => {\n  const input = item.json;\n\n  const fieldData = Array.isArray(input.field_data)\n    ? Object.fromEntries(\n        input.field_data.map((field) => [\n          field.name,\n          Array.isArray(field.values) ? field.values[0] || '' : '',\n        ]),\n      )\n    : {};\n\n  const r = {\n    ...input,\n    ...(input.data || {}),\n    ...fieldData,\n    id: input.id,\n    form_id: input.form?.id || input.form_id || '',\n  };\n\n  const lead_id = String(r.id || '')\n    .trim()\n    .replace(/^l:/, '');\n\n  const raw = String(r.phone_number || '')\n    .trim()\n    .replace(/^p:/, '');\n\n  const full_name = String(r.full_name || '').trim();\n  const email = String(r.email || '').trim().toLowerCase();\n\n  if (\n    !lead_id ||\n    /test lead|dummy data/i.test(raw) ||\n    /test lead|dummy data/i.test(full_name) ||\n    /test lead|dummy data/i.test(email)\n  ) {\n    return [];\n  }\n\n  let phone = raw.replace(/[\\s().-]/g, '');\n\n  if (phone.startsWith('00')) {\n    phone = '+' + phone.slice(2);\n  } else if (phone.startsWith('06')) {\n    phone = '+36' + phone.slice(2);\n  } else if (/^36\\d{8,9}$/.test(phone)) {\n    phone = '+' + phone;\n  } else if (/^\\d{8,9}$/.test(phone)) {\n    phone = '+36' + phone;\n  }\n\n  if (!/^\\+[1-9]\\d{7,14}$/.test(phone)) {\n    return [];\n  }\n\n  if (/^\\+36/.test(phone) && !/^\\+36\\d{8,9}$/.test(phone)) {\n    return [];\n  }\n\n  const call_handling_problem = String(\n    r['mi_a_legnagyobb_problémáid_jelenleg_a_telefonhívások_kezelésével?'] || '',\n  ).trim();\n\n  return [\n    {\n      json: {\n        lead_id,\n        lead_name: full_name || 'Érdeklődő',\n        email,\n        phone,\n\n        company_name: String(r.company_name || '').trim(),\n\n        call_handling_problem,\n\n        // Kompatibilitás a jelenlegi ElevenLabs dynamic variable-lel\n        interested_solution: call_handling_problem,\n\n        industry: String(\n          r['melyik_területen_működik_a_vállalkozásod?'] || '',\n        ).trim(),\n\n        monthly_budget: String(\n          r['mekkora_havi_keretet_tudnál_erre_fordítani?'] || '',\n        ).trim(),\n\n        decision_role: String(\n          r['hogyan_írnád_le_a_szereped_a_döntésben?'] || '',\n        ).trim(),\n\n        desired_timing: String(\n          r['mikor_szeretnél_megoldást_találni?'] || '',\n        ).trim(),\n\n        source: r.__source === 'website_form' ? 'website_form' : 'facebook_lead_ads',\n\n        form_id: String(r.form_id || '').replace(/^f:/, ''),\n      },\n\n      pairedItem: {\n        item: index,\n      },\n    },\n  ];\n});"
+      },
+      "id": "47aae120-a115-427c-b902-dffba5ae41f4",
+      "name": "Normalize Sheet Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5664,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "page": {
+          "__rl": true,
+          "value": "312718245261786",
+          "mode": "list",
+          "cachedResultName": "ConvertedWeb",
+          "cachedResultUrl": "https://facebook.com/312718245261786"
+        },
+        "form": {
+          "__rl": true,
+          "value": "2819359878445768",
+          "mode": "list",
+          "cachedResultName": "AI recepcios 03"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.facebookLeadAdsTrigger",
+      "typeVersion": 1,
+      "position": [
+        5408,
+        896
+      ],
+      "id": "a68fd364-d559-41f8-ae85-21719865a8f2",
+      "name": "Facebook Lead Ads Trigger",
+      "webhookId": "0025c113-390a-488b-9228-a8eeb6882cbf",
+      "credentials": {
+        "facebookLeadAdsOAuth2Api": {
+          "id": "EwMZa6AZSmbYQjAS",
+          "name": "Facebook Lead Call app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "convertedweb@gmail.com",
+          "mode": "list",
+          "cachedResultName": "convertedweb@gmail.com"
+        },
+        "returnAll": true,
+        "timeMin": "={{$('Normalize intake').first().json.calendar_query_start}}",
+        "timeMax": "={{$('Normalize intake').first().json.calendar_query_end}}",
+        "options": {
+          "orderBy": "startTime",
+          "recurringEventHandling": "expand",
+          "timeZone": {
+            "__rl": true,
+            "value": "Europe/Budapest",
+            "mode": "id"
+          }
+        }
+      },
+      "id": "f55b18ef-d149-47e6-a029-c8fd4c0431bd",
+      "name": "Recheck requested slot",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        5632,
+        -512
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "kaLMn1u5LQ4JPDL6",
+          "name": "Google Calendar account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst ZONE = 'Europe/Budapest';\nfunction parts(date) { return Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(date)).map(p=>[p.type,p.value])); }\nfunction localDate(y,m,d,h=0,min=0) {\n  const target=Date.UTC(y,m-1,d,h,min); let guess=target;\n  for(let i=0;i<4;i++) {const p=parts(guess); const wall=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const diff=target-wall;if(!diff)return new Date(guess);guess+=diff;}\n  throw Error('Nem egyértelmű helyi időpont.');\n}\nfunction timestamp(value) {\n  if(typeof value !== 'string') return NaN;\n  const m=value.match(/^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d{1,3})?(Z|[+-]\\d{2}:\\d{2})$/);\n  if(!m) return NaN;\n  const [y,mo,d,h,mi,s]=m.slice(1,7).map(Number), civil=new Date(Date.UTC(y,mo-1,d));\n  if(civil.getUTCFullYear()!==y||civil.getUTCMonth()!==mo-1||civil.getUTCDate()!==d||h>23||mi>59||s>59) return NaN;\n  return Date.parse(value);\n}\nfunction eventTime(value) {\n  if(value?.dateTime) return timestamp(value.dateTime);\n  if(value?.date) {const [y,m,d]=value.date.split('-').map(Number);return +localDate(y,m,d);}\n  return NaN;\n}\nfunction busy(events,start,end) {\n  for(const e of events) {\n    if(e.error) throw Error('calendar_unavailable');\n    if(!Object.keys(e).length||e.status==='cancelled'||e.transparency==='transparent') continue;\n    const a=eventTime(e.start),b=eventTime(e.end);\n    if(!Number.isFinite(a)||!Number.isFinite(b)||b<=a) throw Error('invalid_calendar_event');\n    if(start<b&&end>a) return true;\n  } return false;\n}\nfunction format(value) { const p=parts(value);return p.year+'.'+p.month+'.'+p.day+'. '+p.hour+':'+p.minute; }\n\n\nconst BOOKING_POLICY = {version:'google-2026-09-23', minLeadHours:4, maxDays:60, durationMinutes:30, bufferMinutes:30, maxBookingsPerDay:5};\nfunction dayKey(ms) {const p=parts(ms);return p.year+'-'+p.month+'-'+p.day;}\nfunction policyError(start,end,now=Date.now()) {\n  if(!Number.isFinite(start)||!Number.isFinite(end))return 'invalid_datetime';\n  if(start<now+4*3600000)return 'minimum_4_hours_notice';\n  const today=parts(now);\n  const horizon=+localDate(+today.year,+today.month,+today.day+60,+today.hour,+today.minute)+Number(today.second)*1000;\n  if(start>horizon)return 'maximum_60_days_notice';\n  if(end-start!==30*60000)return 'duration_must_be_30_minutes';\n  const p=parts(start),day=new Date(Date.UTC(+p.year,+p.month-1,+p.day)).getUTCDay(),minute=+p.hour*60 + +p.minute;\n  if(![1,2,3,4,5].includes(day)||minute<570||minute>930||(minute-570)%60||+p.second||start%1000)return 'outside_google_booking_grid';\n  return null;\n}\nfunction bookingEvent(e) {\n  return /30 min with ConvertedWeb|Online konzultáció|Konzultáció -/i.test(String(e.summary||''));\n}\nfunction policyAvailable(events,start,end,now=Date.now()) {\n  if(policyError(start,end,now))return false;\n  let count=0,conflict=false;\n  for(const e of events) {\n    if(e.error)throw Error('calendar_unavailable');\n    if(!Object.keys(e).length||e.status==='cancelled')continue;\n    const a=eventTime(e.start),b=eventTime(e.end);\n    if(!Number.isFinite(a)||!Number.isFinite(b)||b<=a)throw Error('invalid_calendar_event');\n    const appointment=bookingEvent(e);\n    if(appointment&&dayKey(a)===dayKey(start))count++;\n    if(e.transparency==='transparent')continue;\n    const buffer=appointment?30*60000:0;\n    if(start<b+buffer&&end>a-buffer)conflict=true;\n  }\n  return !conflict&&count<5;\n}\n\nconst base=$('Normalize intake').first().json;\ntry {\n  const free=policyAvailable($input.all().map(x=>x.json),Date.parse(base.consultation_start_iso),Date.parse(base.consultation_end_iso));\n  return [{json:{free,success:false,http_status:409,message:'Az időpont már nem foglalható (foglalt, szünet, napi limit vagy 4 órás előfoglalás). Kérjen új szabad időpontot.'}}];\n} catch(e) {return [{json:{free:false,success:false,http_status:503,message:'A naptár nem ellenőrizhető. Foglalás nem készült.'}}];}\n"
+      },
+      "name": "Requested slot free",
+      "id": "08034974-d6af-49f1-add9-071457748e54",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5856,
+        -512
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid-intake",
+              "leftValue": "={{$json.free}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "677f182f-649f-4355-a71b-6a48a399aea7",
+      "name": "Requested slot available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6096,
+        -512
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid-intake",
+              "leftValue": "={{$json.success}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7ae2c517-390a-4d8d-9cbe-947bf21c0e2f",
+      "name": "Booking confirmed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6560,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8",
+          "mode": "list",
+          "cachedResultName": "AI recepcios 02",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8/edit?usp=sharing"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "leads",
+          "mode": "name",
+          "cachedResultName": "leads"
+        },
+        "options": {}
+      },
+      "id": "107e2740-7be8-4cba-81d7-edf19bd86ae3",
+      "name": "Find source Sheet row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        6832,
+        -240
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "twL7qLUNIo1nyie5",
+          "name": "CONVERTEDWEB - Google Service"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst b=$('Prepare consultation row').first().json;\nconst rows=$input.all().map(x=>x.json);\nconst found=b.lead_id ? rows.filter(x=>String(x.id||'').trim().replace(/^l:/,'')===b.lead_id) : [];\nreturn [{json:{...b,id:found.length===1?String(found[0].id):'',sheet_match:found.length===1,\n  sheet_warning:rows.some(x=>x.error)?'A Sheet nem olvasható.':found.length!==1?'A forrás Sheetben nincs pontosan egy egyező lead; automatikus új sor nem készült.':''}}];\n"
+      },
+      "name": "Match source Sheet row",
+      "id": "b18144b0-d0a3-4df2-bdf7-dfe368afb7c7",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7040,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid-intake",
+              "leftValue": "={{$json.sheet_match}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a4ed8dcd-714f-4a40-b519-36cb9e3a2fd7",
+      "name": "Source row matched?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7264,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst b=$('Match source Sheet row').first().json;\nconst warnings=[...(b.warnings||[])];\nif(b.sheet_warning)warnings.push(b.sheet_warning);\nif(b.sheet_match&&($json.error||!Object.keys($json).length))warnings.push('A Sheet-frissítés nem igazolt. A naptáresemény már létrejött.');\nreturn [{json:{...b,warnings,send_confirmation:true}}];\n"
+      },
+      "name": "Prepare confirmation",
+      "id": "426e2f86-7e35-4e28-b281-094438506030",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7280,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid-intake",
+              "leftValue": "={{$json.send_confirmation}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8fa4900c-81d9-4a4c-ac69-3e878892e64a",
+      "name": "Meet link ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7472,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst b=$('Prepare confirmation').first().json;\nconst sent=b.send_confirmation && !!$json.id && !$json.error;\nconst warnings=[...b.warnings];\nif(b.send_confirmation&&!sent)warnings.push('A külön visszaigazoló email küldése nem igazolt; automatikusan nem ismételjük meg.');\nreturn [{json:{...b,email_sent_to_caller:sent,booking_link_sent:sent&&!!b.booking_link,warnings}}];\n"
+      },
+      "name": "Record notification outcome",
+      "id": "34de9057-6e52-4916-9b95-924032ba8d14",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7760,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst b=$('Record notification outcome').first().json;\nreturn [{json:{success:true,http_status:200,message:b.message,calendar_event_id:b.calendar_event_id,booking_link:b.booking_link,\n  consultation_start:b.consultation_start_iso,consultation_end:b.consultation_end_iso,email_sent_to_caller:b.email_sent_to_caller,warnings:b.warnings}}];\n"
+      },
+      "name": "Final booking response",
+      "id": "97b9458d-92f9-4b0c-b1fb-d5e45fca67fc",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8064,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "source": "parameter",
+        "workflowJson": "{\n  \"name\": \"Lead Call - weekday call worker\",\n  \"nodes\": [\n    {\n      \"id\": \"bba8a66e-680f-4960-8a35-0793aae48332\",\n      \"name\": \"Input\",\n      \"type\": \"n8n-nodes-base.executeWorkflowTrigger\",\n      \"typeVersion\": 1.1,\n      \"position\": [\n        0,\n        0\n      ],\n      \"parameters\": {\n        \"inputSource\": \"passthrough\"\n      }\n    },\n    {\n      \"id\": \"912bd830-81b2-45d1-9e2b-a2c77f7a8237\",\n      \"name\": \"Plan call\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        260,\n        0\n      ],\n      \"parameters\": {\n        \"jsCode\": \"\\nconst ZONE = 'Europe/Budapest';\\nfunction parts(date) { return Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(date)).map(p=>[p.type,p.value])); }\\nfunction localDate(y,m,d,h=0,min=0) {\\n  const target=Date.UTC(y,m-1,d,h,min); let guess=target;\\n  for(let i=0;i<4;i++) {const p=parts(guess); const wall=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const diff=target-wall;if(!diff)return new Date(guess);guess+=diff;}\\n  throw Error('Nem egyértelmű helyi időpont.');\\n}\\n\\nfunction callTime(value) {\\n let t=Math.max(Number(value),Date.now());\\n for(let i=0;i<8;i++) {const p=parts(t),dow=new Date(Date.UTC(+p.year,+p.month-1,+p.day)).getUTCDay(),m=+p.hour*60 + +p.minute;\\n  if(dow>=1&&dow<=5&&m>=480&&m<1200)return t;\\n  if(dow>=1&&dow<=5&&m<480)return +localDate(+p.year,+p.month,+p.day,8);\\n  t=+localDate(+p.year,+p.month,+p.day+1,8);\\n } throw Error('Cannot schedule call');\\n}\\n\\nconst b=$json,attempt=Number(b.attempt_number||1);\\nif(!Number.isInteger(attempt)||attempt<1||attempt>3)throw Error('Invalid attempt counter');\\nconst at=callTime(b.next_call_at?Date.parse(b.next_call_at):Date.now());\\nreturn [{json:{...b,attempt_number:attempt,next_call_at:new Date(at).toISOString(),send_delay_email:attempt===1&&at>Date.now()+1000&&/^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$/.test(b.email||''),call_day:new Intl.DateTimeFormat('hu-HU',{timeZone:ZONE,weekday:'long',month:'long',day:'numeric'}).format(at)}}];\"\n      }\n    },\n    {\n      \"id\": \"fcdd5d2c-7396-446e-8a28-e4a50e32e218\",\n      \"name\": \"Send delayed lead email?\",\n      \"type\": \"n8n-nodes-base.if\",\n      \"typeVersion\": 2.2,\n      \"position\": [\n        520,\n        0\n      ],\n      \"parameters\": {\n        \"conditions\": {\n          \"options\": {\n            \"caseSensitive\": true,\n            \"leftValue\": \"\",\n            \"typeValidation\": \"strict\",\n            \"version\": 2\n          },\n          \"conditions\": [\n            {\n              \"id\": \"02ee7690-7e85-4d47-9a30-4af249c9dab8\",\n              \"leftValue\": \"={{$json.send_delay_email}}\",\n              \"rightValue\": true,\n              \"operator\": {\n                \"type\": \"boolean\",\n                \"operation\": \"true\",\n                \"singleValue\": true\n              }\n            }\n          ],\n          \"combinator\": \"and\"\n        },\n        \"options\": {}\n      }\n    },\n    {\n      \"id\": \"f0551d55-52e7-4d38-bf91-7bc252948111\",\n      \"name\": \"Delayed lead email\",\n      \"type\": \"n8n-nodes-base.gmail\",\n      \"typeVersion\": 2.1,\n      \"position\": [\n        780,\n        0\n      ],\n      \"parameters\": {\n        \"sendTo\": \"={{$json.email}}\",\n        \"subject\": \"ConvertedWeb – jelentkezését megkaptuk\",\n        \"emailType\": \"text\",\n        \"message\": \"={{ 'Kedves ' + $json.lead_name + '!\\\\n\\\\nKöszönjük a jelentkezését. Asszisztensünk a következő hívási napon, ' + $json.call_day + ' 8 óra után keresi telefonon, hogy egyeztessenek egy 30 perces online konzultációt.\\\\n\\\\nÜdvözlettel: ConvertedWeb' }}\",\n        \"options\": {}\n      },\n      \"credentials\": {\n        \"gmailOAuth2\": {\n          \"id\": \"r4oEPgpMc7kSM1wA\",\n          \"name\": \"CONVERTEDWEB - Gmail\"\n        }\n      },\n      \"onError\": \"continueRegularOutput\",\n      \"retryOnFail\": false\n    },\n    {\n      \"id\": \"97fb1484-fd9b-4ea7-97d5-98c2d85bebba\",\n      \"name\": \"Restore call plan\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        1040,\n        0\n      ],\n      \"parameters\": {\n        \"jsCode\": \"return [{json:{...$('Plan call').first().json,delay_email_sent:!!$json.id&&!$json.error}}];\"\n      }\n    },\n    {\n      \"id\": \"e1d536f8-a7ff-48d3-9b5c-7964674b66df\",\n      \"name\": \"Wait for call window\",\n      \"type\": \"n8n-nodes-base.wait\",\n      \"typeVersion\": 1.1,\n      \"position\": [\n        1300,\n        0\n      ],\n      \"parameters\": {\n        \"resume\": \"specificTime\",\n        \"dateTime\": \"={{$json.next_call_at}}\"\n      },\n      \"webhookId\": \"91015012-30c8-439c-8f59-c77e5375c92c\"\n    },\n    {\n      \"id\": \"c80e41cd-a664-41f6-bff6-b31b2a161793\",\n      \"name\": \"Read lead stop status\",\n      \"type\": \"n8n-nodes-base.googleSheets\",\n      \"typeVersion\": 4.5,\n      \"position\": [\n        1560,\n        0\n      ],\n      \"parameters\": {\n        \"authentication\": \"serviceAccount\",\n        \"documentId\": {\n          \"__rl\": true,\n          \"value\": \"1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8\",\n          \"mode\": \"list\",\n          \"cachedResultName\": \"AI recepcios 02\",\n          \"cachedResultUrl\": \"https://docs.google.com/spreadsheets/d/1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8/edit?usp=sharing\"\n        },\n        \"sheetName\": {\n          \"__rl\": true,\n          \"value\": \"leads\",\n          \"mode\": \"name\",\n          \"cachedResultName\": \"leads\"\n        },\n        \"options\": {}\n      },\n      \"credentials\": {\n        \"googleApi\": {\n          \"id\": \"twL7qLUNIo1nyie5\",\n          \"name\": \"CONVERTEDWEB - Google Service\"\n        }\n      },\n      \"alwaysOutputData\": true\n    },\n    {\n      \"id\": \"dcb6a610-fc0e-46b4-82ae-7ff1534eb8ae\",\n      \"name\": \"Check stop status\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        0,\n        240\n      ],\n      \"parameters\": {\n        \"jsCode\": \"\\nconst b=$('Wait for call window').item.json,rows=$input.all().map(x=>x.json);\\nif(rows.some(x=>x.error))throw Error('Sheet status unavailable; call stopped');\\nconst matches=rows.filter(r=>String(r.id||'').replace(/^l:/,'')===String(b.lead_id));\\nconst stop=matches.some(r=>/^(confirmed|booked|answered|completed|declined|do_not_call|opted_out|cancelled)$/i.test(String(r.call_status||''))||/^(confirmed|booked|declined|do_not_call|opted_out)$/i.test(String(r.status||''))||/^(true|1|yes|igen)$/i.test(String(r.do_not_call||'')));\\nreturn [{json:{...b,should_call:!stop,call_status:stop?'stopped':'scheduled'}}];\"\n      }\n    },\n    {\n      \"id\": \"add2a248-71af-47c1-ba15-7827741cfb42\",\n      \"name\": \"Call still allowed?\",\n      \"type\": \"n8n-nodes-base.if\",\n      \"typeVersion\": 2.2,\n      \"position\": [\n        260,\n        240\n      ],\n      \"parameters\": {\n        \"conditions\": {\n          \"options\": {\n            \"caseSensitive\": true,\n            \"leftValue\": \"\",\n            \"typeValidation\": \"strict\",\n            \"version\": 2\n          },\n          \"conditions\": [\n            {\n              \"id\": \"6fa04b8a-f497-40a9-a4ee-ca00d4b60edf\",\n              \"leftValue\": \"={{$json.should_call}}\",\n              \"rightValue\": true,\n              \"operator\": {\n                \"type\": \"boolean\",\n                \"operation\": \"true\",\n                \"singleValue\": true\n              }\n            }\n          ],\n          \"combinator\": \"and\"\n        },\n        \"options\": {}\n      }\n    },\n    {\n      \"id\": \"6f35beb3-2ce2-4862-bcb5-17e2652a60f0\",\n      \"name\": \"Final call window guard\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        520,\n        240\n      ],\n      \"parameters\": {\n        \"jsCode\": \"\\nconst ZONE = 'Europe/Budapest';\\nfunction parts(date) { return Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(date)).map(p=>[p.type,p.value])); }\\nfunction localDate(y,m,d,h=0,min=0) {\\n  const target=Date.UTC(y,m-1,d,h,min); let guess=target;\\n  for(let i=0;i<4;i++) {const p=parts(guess); const wall=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const diff=target-wall;if(!diff)return new Date(guess);guess+=diff;}\\n  throw Error('Nem egyértelmű helyi időpont.');\\n}\\n\\nfunction callTime(value) {\\n let t=Math.max(Number(value),Date.now());\\n for(let i=0;i<8;i++) {const p=parts(t),dow=new Date(Date.UTC(+p.year,+p.month-1,+p.day)).getUTCDay(),m=+p.hour*60 + +p.minute;\\n  if(dow>=1&&dow<=5&&m>=480&&m<1200)return t;\\n  if(dow>=1&&dow<=5&&m<480)return +localDate(+p.year,+p.month,+p.day,8);\\n  t=+localDate(+p.year,+p.month,+p.day+1,8);\\n } throw Error('Cannot schedule call');\\n}\\n\\nconst b=$json,now=Date.now(),at=callTime(now);\\nreturn [{json:{...b,next_call_at:new Date(at).toISOString(),dial_now:at===now,first_attempt_at:b.first_attempt_at||(at===now?new Date(now).toISOString():''),last_attempt_at:at===now?new Date(now).toISOString():b.last_attempt_at||''}}];\"\n      }\n    },\n    {\n      \"id\": \"1dabbcd4-78ae-4e04-9440-334a62b97175\",\n      \"name\": \"Inside call window?\",\n      \"type\": \"n8n-nodes-base.if\",\n      \"typeVersion\": 2.2,\n      \"position\": [\n        780,\n        240\n      ],\n      \"parameters\": {\n        \"conditions\": {\n          \"options\": {\n            \"caseSensitive\": true,\n            \"leftValue\": \"\",\n            \"typeValidation\": \"strict\",\n            \"version\": 2\n          },\n          \"conditions\": [\n            {\n              \"id\": \"4fc5345e-ed2f-4793-8684-21342d4c70b5\",\n              \"leftValue\": \"={{$json.dial_now}}\",\n              \"rightValue\": true,\n              \"operator\": {\n                \"type\": \"boolean\",\n                \"operation\": \"true\",\n                \"singleValue\": true\n              }\n            }\n          ],\n          \"combinator\": \"and\"\n        },\n        \"options\": {}\n      }\n    },\n    {\n      \"parameters\": {\n        \"method\": \"POST\",\n        \"url\": \"https://api.elevenlabs.io/v1/convai/sip-trunk/outbound-call\",\n        \"authentication\": \"genericCredentialType\",\n        \"genericAuthType\": \"httpHeaderAuth\",\n        \"sendBody\": true,\n        \"specifyBody\": \"json\",\n        \"jsonBody\": \"={{ ({\\n  agent_id: \\\"agent_7601m2wnkpmff0ta6bqg5adnmmax\\\",\\n  agent_phone_number_id: \\\"phnum_6001m32h1sz9f1fa1r9cmb63v8t0\\\",\\n  to_number: $json.phone,\\n  conversation_initiation_client_data: {\\n    dynamic_variables: {\\n      lead_name: $json.lead_name,\\n      lead_email: $json.email,\\n      lead_phone: $json.phone,\\n      company_name: $json.company_name,\\n      interested_solution: $json.interested_solution,\\n      monthly_budget: $json.monthly_budget,\\n      desired_timing: $json.desired_timing,\\n      lead_id: $json.lead_id,\\n      followup_attempt: $json.attempt_number,\\n      followup_first_at: $json.first_attempt_at,\\n      followup_last_at: $json.last_attempt_at\\n    }\\n  }\\n}) }}\",\n        \"options\": {\n          \"timeout\": 120000\n        }\n      },\n      \"id\": \"434c5ca7-4734-4077-99d9-31dc7b9afd34\",\n      \"name\": \"ElevenLabs Outbound Call\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 4.2,\n      \"position\": [\n        1900,\n        500\n      ],\n      \"retryOnFail\": false,\n      \"credentials\": {\n        \"httpHeaderAuth\": {\n          \"id\": \"g6w66UlOLzbF9aCM\",\n          \"name\": \"Elevenlabs - Outbound Call\"\n        }\n      },\n      \"notes\": \"SIP/Telnyx. Dial only after weekday guard. No HTTP retries: ambiguous initiation requires manual review. Verified no-answer callbacks schedule at most two retries.\"\n    },\n    {\n      \"id\": \"be2c77a1-e2d3-4f29-b7d1-a95ca475b7a7\",\n      \"name\": \"Record call initiation\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        1300,\n        240\n      ],\n      \"parameters\": {\n        \"jsCode\": \"const b=$('Final call window guard').item.json; if(!$json.conversation_id)throw Error('Unknown initiation result; inspect before retrying');return [{json:{lead_id:b.lead_id,attempt_number:b.attempt_number,first_attempt_at:b.first_attempt_at,last_attempt_at:b.last_attempt_at,conversation_id:$json.conversation_id,call_status:'initiated'}}];\"\n      }\n    }\n  ],\n  \"connections\": {\n    \"Input\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Plan call\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Plan call\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Send delayed lead email?\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Send delayed lead email?\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Delayed lead email\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"Wait for call window\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Delayed lead email\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Restore call plan\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Restore call plan\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Wait for call window\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Wait for call window\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Read lead stop status\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Read lead stop status\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Check stop status\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Check stop status\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Call still allowed?\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Call still allowed?\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Final call window guard\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Final call window guard\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Inside call window?\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Inside call window?\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"ElevenLabs Outbound Call\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"Wait for call window\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"ElevenLabs Outbound Call\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Record call initiation\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    }\n  },\n  \"settings\": {\n    \"executionOrder\": \"v1\",\n    \"timezone\": \"Europe/Budapest\"\n  },\n  \"active\": false,\n  \"pinData\": {}\n}",
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "473fa08f-e8f9-4a33-9a92-dfeae6161aa9",
+      "name": "Start scheduled call",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        5904,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "facebook-lead-call-result",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "d424d8d8-cb6d-434f-9b30-1fe4ee36db10",
+      "name": "ElevenLabs failure Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        5392,
+        192
+      ],
+      "webhookId": "ac89dadc-e65a-4d1a-a88a-fedfdb600cc3"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nlet secret;try{secret=$env.LEAD_CALL_WEBHOOK_SECRET;}catch(e){}\nif(!secret)return [{json:{verified:false,http_status:503,reason:'webhook_secret_not_configured'}}];\nconst crypto=require('crypto');\nconst input=$input.first(),sig=String(input.json.headers?.['elevenlabs-signature']||'');\nconst fields=sig.split(',').map(s=>s.trim().split('=')),ts=fields.find(x=>x[0]==='t')?.[1],signatures=fields.filter(x=>x[0]==='v0').map(x=>x[1]);\nif(!/^\\d+$/.test(ts||'')||Math.abs(Date.now()/1000-Number(ts))>300)return [{json:{verified:false,http_status:401,reason:'invalid_timestamp'}}];\nlet raw;try{raw=await this.helpers.getBinaryDataBuffer(0,'data');}catch(e){return [{json:{verified:false,http_status:400,reason:'raw_body_required'}}];}\nconst expected=crypto.createHmac('sha256',secret).update(ts+'.').update(raw).digest();\nconst valid=signatures.some(s=>/^[a-f0-9]{64}$/i.test(s||'')&&crypto.timingSafeEqual(expected,Buffer.from(s,'hex')));\nif(!valid)return [{json:{verified:false,http_status:401,reason:'invalid_signature'}}];\nlet e;try{e=JSON.parse(raw.toString('utf8'));}catch(err){return [{json:{verified:false,http_status:400,reason:'invalid_json'}}];}\nconst d=e.data||{};\nconst failureReason=String(d.failure_reason||d.error?.reason||d.metadata?.error?.reason||e.failure_reason||'').toLowerCase().trim();\nconst normalizedFailure=failureReason.replace(/[_-]+/g,' ').replace(/\\s+/g,' ');\nconst retryableFailure=/(^|\\b)(no answer|busy|timeout|timed out|sip request timed out|temporarily unavailable|service unavailable|gateway timeout|network error)(\\b|$)/i.test(normalizedFailure);\nconst conversationId=String(d.conversation_id||d.metadata?.conversation_id||e.conversation_id||'');\nconst agentId=String(d.agent_id||d.metadata?.agent_id||e.agent_id||'');\nconst retry_candidate=e.type==='call_initiation_failure'&&agentId==='agent_7601m2wnkpmff0ta6bqg5adnmmax'&&retryableFailure&&/^conv_[a-zA-Z0-9]+$/.test(conversationId);\nreturn [{json:{verified:true,http_status:200,retry_candidate,conversation_id:conversationId,failure_reason:failureReason,event_timestamp:e.event_timestamp}}];"
+      },
+      "id": "a02d12eb-e1f9-4a86-8b2f-df03d0510531",
+      "name": "Verify call result signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5648,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{({received:$json.verified,reason:$json.reason||\"accepted\"})}}",
+        "options": {
+          "responseCode": "={{$json.http_status}}"
+        }
+      },
+      "id": "8df413c1-ab60-4a65-a8b7-47f1b96a3875",
+      "name": "Acknowledge call result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        5904,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "02855d83-9efe-4a1a-80a4-dcb45e407312",
+              "leftValue": "={{$json.retry_candidate}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dd86aa35-c449-4b56-bbe0-e544fb479c54",
+      "name": "Retryable call failure?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6160,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{\"https://api.elevenlabs.io/v1/convai/conversations/\" + $json.conversation_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "c04619a1-4432-4c62-8ade-6a847650304c",
+      "name": "Get failed conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6432,
+        176
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "g6w66UlOLzbF9aCM",
+          "name": "Elevenlabs - Outbound Call"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst ZONE = 'Europe/Budapest';\nfunction parts(date) { return Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(date)).map(p=>[p.type,p.value])); }\nfunction localDate(y,m,d,h=0,min=0) {\n  const target=Date.UTC(y,m-1,d,h,min); let guess=target;\n  for(let i=0;i<4;i++) {const p=parts(guess); const wall=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const diff=target-wall;if(!diff)return new Date(guess);guess+=diff;}\n  throw Error('Nem egyértelmű helyi időpont.');\n}\n\nfunction callTime(value) {\n let t=Math.max(Number(value),Date.now());\n for(let i=0;i<8;i++) {const p=parts(t),dow=new Date(Date.UTC(+p.year,+p.month-1,+p.day)).getUTCDay(),m=+p.hour*60 + +p.minute;\n  if(dow>=1&&dow<=5&&m>=480&&m<1200)return t;\n  if(dow>=1&&dow<=5&&m<480)return +localDate(+p.year,+p.month,+p.day,8);\n  t=+localDate(+p.year,+p.month,+p.day+1,8);\n } throw Error('Cannot schedule call');\n}\n\nconst e=$('Verify call result signature').first().json,c=$json,v=c.conversation_initiation_client_data?.dynamic_variables||{};\nif(c.agent_id!=='agent_7601m2wnkpmff0ta6bqg5adnmmax'||c.conversation_id!==e.conversation_id)throw Error('Conversation mismatch');\nif(c.status!=='failed'||(c.transcript||[]).some(t=>t.role==='user')||c.metadata?.call_duration_secs>0)return [];\nconst previous=Number(v.followup_attempt),first=Date.parse(v.followup_first_at),last=Date.parse(v.followup_last_at);\nif(!Number.isInteger(previous)||previous<1||previous>3||!Number.isFinite(first)||!Number.isFinite(last)||last<first||last>Date.now()+60000)throw Error('Missing or invalid retry state; inspect manually');\nif(previous>=3)return [];\nif(!v.lead_id||!/^\\+[1-9]\\d{7,14}$/.test(v.lead_phone||''))throw Error('Missing retry lead identity');\nconst at=callTime(Math.max(first+(previous===1?15:120)*60000,last+15*60000,Date.now()));\nreturn [{json:{lead_id:String(v.lead_id),lead_name:String(v.lead_name||'Érdeklődő'),email:String(v.lead_email||''),phone:v.lead_phone,company_name:String(v.company_name||''),interested_solution:String(v.interested_solution||''),monthly_budget:String(v.monthly_budget||''),desired_timing:String(v.desired_timing||''),attempt_number:previous+1,first_attempt_at:v.followup_first_at,next_call_at:new Date(at).toISOString(),source:'verified_no_answer'}}];"
+      },
+      "id": "c9fe7ec9-a83c-4e4f-ad3f-1f26db6ccdf7",
+      "name": "Plan unanswered retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6688,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "source": "parameter",
+        "workflowJson": "{\n  \"name\": \"Lead Call - weekday call worker\",\n  \"nodes\": [\n    {\n      \"id\": \"bba8a66e-680f-4960-8a35-0793aae48332\",\n      \"name\": \"Input\",\n      \"type\": \"n8n-nodes-base.executeWorkflowTrigger\",\n      \"typeVersion\": 1.1,\n      \"position\": [\n        0,\n        0\n      ],\n      \"parameters\": {\n        \"inputSource\": \"passthrough\"\n      }\n    },\n    {\n      \"id\": \"912bd830-81b2-45d1-9e2b-a2c77f7a8237\",\n      \"name\": \"Plan call\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        260,\n        0\n      ],\n      \"parameters\": {\n        \"jsCode\": \"\\nconst ZONE = 'Europe/Budapest';\\nfunction parts(date) { return Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(date)).map(p=>[p.type,p.value])); }\\nfunction localDate(y,m,d,h=0,min=0) {\\n  const target=Date.UTC(y,m-1,d,h,min); let guess=target;\\n  for(let i=0;i<4;i++) {const p=parts(guess); const wall=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const diff=target-wall;if(!diff)return new Date(guess);guess+=diff;}\\n  throw Error('Nem egyértelmű helyi időpont.');\\n}\\n\\nfunction callTime(value) {\\n let t=Math.max(Number(value),Date.now());\\n for(let i=0;i<8;i++) {const p=parts(t),dow=new Date(Date.UTC(+p.year,+p.month-1,+p.day)).getUTCDay(),m=+p.hour*60 + +p.minute;\\n  if(dow>=1&&dow<=5&&m>=480&&m<1200)return t;\\n  if(dow>=1&&dow<=5&&m<480)return +localDate(+p.year,+p.month,+p.day,8);\\n  t=+localDate(+p.year,+p.month,+p.day+1,8);\\n } throw Error('Cannot schedule call');\\n}\\n\\nconst b=$json,attempt=Number(b.attempt_number||1);\\nif(!Number.isInteger(attempt)||attempt<1||attempt>3)throw Error('Invalid attempt counter');\\nconst at=callTime(b.next_call_at?Date.parse(b.next_call_at):Date.now());\\nreturn [{json:{...b,attempt_number:attempt,next_call_at:new Date(at).toISOString(),send_delay_email:attempt===1&&at>Date.now()+1000&&/^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$/.test(b.email||''),call_day:new Intl.DateTimeFormat('hu-HU',{timeZone:ZONE,weekday:'long',month:'long',day:'numeric'}).format(at)}}];\"\n      }\n    },\n    {\n      \"id\": \"fcdd5d2c-7396-446e-8a28-e4a50e32e218\",\n      \"name\": \"Send delayed lead email?\",\n      \"type\": \"n8n-nodes-base.if\",\n      \"typeVersion\": 2.2,\n      \"position\": [\n        520,\n        0\n      ],\n      \"parameters\": {\n        \"conditions\": {\n          \"options\": {\n            \"caseSensitive\": true,\n            \"leftValue\": \"\",\n            \"typeValidation\": \"strict\",\n            \"version\": 2\n          },\n          \"conditions\": [\n            {\n              \"id\": \"02ee7690-7e85-4d47-9a30-4af249c9dab8\",\n              \"leftValue\": \"={{$json.send_delay_email}}\",\n              \"rightValue\": true,\n              \"operator\": {\n                \"type\": \"boolean\",\n                \"operation\": \"true\",\n                \"singleValue\": true\n              }\n            }\n          ],\n          \"combinator\": \"and\"\n        },\n        \"options\": {}\n      }\n    },\n    {\n      \"id\": \"f0551d55-52e7-4d38-bf91-7bc252948111\",\n      \"name\": \"Delayed lead email\",\n      \"type\": \"n8n-nodes-base.gmail\",\n      \"typeVersion\": 2.1,\n      \"position\": [\n        780,\n        0\n      ],\n      \"parameters\": {\n        \"sendTo\": \"={{$json.email}}\",\n        \"subject\": \"ConvertedWeb – jelentkezését megkaptuk\",\n        \"emailType\": \"text\",\n        \"message\": \"={{ 'Kedves ' + $json.lead_name + '!\\\\n\\\\nKöszönjük a jelentkezését. Asszisztensünk a következő hívási napon, ' + $json.call_day + ' 8 óra után keresi telefonon, hogy egyeztessenek egy 30 perces online konzultációt.\\\\n\\\\nÜdvözlettel: ConvertedWeb' }}\",\n        \"options\": {}\n      },\n      \"credentials\": {\n        \"gmailOAuth2\": {\n          \"id\": \"r4oEPgpMc7kSM1wA\",\n          \"name\": \"CONVERTEDWEB - Gmail\"\n        }\n      },\n      \"onError\": \"continueRegularOutput\",\n      \"retryOnFail\": false\n    },\n    {\n      \"id\": \"97fb1484-fd9b-4ea7-97d5-98c2d85bebba\",\n      \"name\": \"Restore call plan\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        1040,\n        0\n      ],\n      \"parameters\": {\n        \"jsCode\": \"return [{json:{...$('Plan call').first().json,delay_email_sent:!!$json.id&&!$json.error}}];\"\n      }\n    },\n    {\n      \"id\": \"e1d536f8-a7ff-48d3-9b5c-7964674b66df\",\n      \"name\": \"Wait for call window\",\n      \"type\": \"n8n-nodes-base.wait\",\n      \"typeVersion\": 1.1,\n      \"position\": [\n        1300,\n        0\n      ],\n      \"parameters\": {\n        \"resume\": \"specificTime\",\n        \"dateTime\": \"={{$json.next_call_at}}\"\n      },\n      \"webhookId\": \"91015012-30c8-439c-8f59-c77e5375c92c\"\n    },\n    {\n      \"id\": \"c80e41cd-a664-41f6-bff6-b31b2a161793\",\n      \"name\": \"Read lead stop status\",\n      \"type\": \"n8n-nodes-base.googleSheets\",\n      \"typeVersion\": 4.5,\n      \"position\": [\n        1560,\n        0\n      ],\n      \"parameters\": {\n        \"authentication\": \"serviceAccount\",\n        \"documentId\": {\n          \"__rl\": true,\n          \"value\": \"1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8\",\n          \"mode\": \"list\",\n          \"cachedResultName\": \"AI recepcios 02\",\n          \"cachedResultUrl\": \"https://docs.google.com/spreadsheets/d/1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8/edit?usp=sharing\"\n        },\n        \"sheetName\": {\n          \"__rl\": true,\n          \"value\": \"leads\",\n          \"mode\": \"name\",\n          \"cachedResultName\": \"leads\"\n        },\n        \"options\": {}\n      },\n      \"credentials\": {\n        \"googleApi\": {\n          \"id\": \"twL7qLUNIo1nyie5\",\n          \"name\": \"CONVERTEDWEB - Google Service\"\n        }\n      },\n      \"alwaysOutputData\": true\n    },\n    {\n      \"id\": \"dcb6a610-fc0e-46b4-82ae-7ff1534eb8ae\",\n      \"name\": \"Check stop status\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        0,\n        240\n      ],\n      \"parameters\": {\n        \"jsCode\": \"\\nconst b=$('Wait for call window').item.json,rows=$input.all().map(x=>x.json);\\nif(rows.some(x=>x.error))throw Error('Sheet status unavailable; call stopped');\\nconst matches=rows.filter(r=>String(r.id||'').replace(/^l:/,'')===String(b.lead_id));\\nconst stop=matches.some(r=>/^(confirmed|booked|answered|completed|declined|do_not_call|opted_out|cancelled)$/i.test(String(r.call_status||''))||/^(confirmed|booked|declined|do_not_call|opted_out)$/i.test(String(r.status||''))||/^(true|1|yes|igen)$/i.test(String(r.do_not_call||'')));\\nreturn [{json:{...b,should_call:!stop,call_status:stop?'stopped':'scheduled'}}];\"\n      }\n    },\n    {\n      \"id\": \"add2a248-71af-47c1-ba15-7827741cfb42\",\n      \"name\": \"Call still allowed?\",\n      \"type\": \"n8n-nodes-base.if\",\n      \"typeVersion\": 2.2,\n      \"position\": [\n        260,\n        240\n      ],\n      \"parameters\": {\n        \"conditions\": {\n          \"options\": {\n            \"caseSensitive\": true,\n            \"leftValue\": \"\",\n            \"typeValidation\": \"strict\",\n            \"version\": 2\n          },\n          \"conditions\": [\n            {\n              \"id\": \"6fa04b8a-f497-40a9-a4ee-ca00d4b60edf\",\n              \"leftValue\": \"={{$json.should_call}}\",\n              \"rightValue\": true,\n              \"operator\": {\n                \"type\": \"boolean\",\n                \"operation\": \"true\",\n                \"singleValue\": true\n              }\n            }\n          ],\n          \"combinator\": \"and\"\n        },\n        \"options\": {}\n      }\n    },\n    {\n      \"id\": \"6f35beb3-2ce2-4862-bcb5-17e2652a60f0\",\n      \"name\": \"Final call window guard\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        520,\n        240\n      ],\n      \"parameters\": {\n        \"jsCode\": \"\\nconst ZONE = 'Europe/Budapest';\\nfunction parts(date) { return Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(date)).map(p=>[p.type,p.value])); }\\nfunction localDate(y,m,d,h=0,min=0) {\\n  const target=Date.UTC(y,m-1,d,h,min); let guess=target;\\n  for(let i=0;i<4;i++) {const p=parts(guess); const wall=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const diff=target-wall;if(!diff)return new Date(guess);guess+=diff;}\\n  throw Error('Nem egyértelmű helyi időpont.');\\n}\\n\\nfunction callTime(value) {\\n let t=Math.max(Number(value),Date.now());\\n for(let i=0;i<8;i++) {const p=parts(t),dow=new Date(Date.UTC(+p.year,+p.month-1,+p.day)).getUTCDay(),m=+p.hour*60 + +p.minute;\\n  if(dow>=1&&dow<=5&&m>=480&&m<1200)return t;\\n  if(dow>=1&&dow<=5&&m<480)return +localDate(+p.year,+p.month,+p.day,8);\\n  t=+localDate(+p.year,+p.month,+p.day+1,8);\\n } throw Error('Cannot schedule call');\\n}\\n\\nconst b=$json,now=Date.now(),at=callTime(now);\\nreturn [{json:{...b,next_call_at:new Date(at).toISOString(),dial_now:at===now,first_attempt_at:b.first_attempt_at||(at===now?new Date(now).toISOString():''),last_attempt_at:at===now?new Date(now).toISOString():b.last_attempt_at||''}}];\"\n      }\n    },\n    {\n      \"id\": \"1dabbcd4-78ae-4e04-9440-334a62b97175\",\n      \"name\": \"Inside call window?\",\n      \"type\": \"n8n-nodes-base.if\",\n      \"typeVersion\": 2.2,\n      \"position\": [\n        780,\n        240\n      ],\n      \"parameters\": {\n        \"conditions\": {\n          \"options\": {\n            \"caseSensitive\": true,\n            \"leftValue\": \"\",\n            \"typeValidation\": \"strict\",\n            \"version\": 2\n          },\n          \"conditions\": [\n            {\n              \"id\": \"4fc5345e-ed2f-4793-8684-21342d4c70b5\",\n              \"leftValue\": \"={{$json.dial_now}}\",\n              \"rightValue\": true,\n              \"operator\": {\n                \"type\": \"boolean\",\n                \"operation\": \"true\",\n                \"singleValue\": true\n              }\n            }\n          ],\n          \"combinator\": \"and\"\n        },\n        \"options\": {}\n      }\n    },\n    {\n      \"parameters\": {\n        \"method\": \"POST\",\n        \"url\": \"https://api.elevenlabs.io/v1/convai/sip-trunk/outbound-call\",\n        \"authentication\": \"genericCredentialType\",\n        \"genericAuthType\": \"httpHeaderAuth\",\n        \"sendBody\": true,\n        \"specifyBody\": \"json\",\n        \"jsonBody\": \"={{ ({\\n  agent_id: \\\"agent_7601m2wnkpmff0ta6bqg5adnmmax\\\",\\n  agent_phone_number_id: \\\"phnum_6001m32h1sz9f1fa1r9cmb63v8t0\\\",\\n  to_number: $json.phone,\\n  conversation_initiation_client_data: {\\n    dynamic_variables: {\\n      lead_name: $json.lead_name,\\n      lead_email: $json.email,\\n      lead_phone: $json.phone,\\n      company_name: $json.company_name,\\n      interested_solution: $json.interested_solution,\\n      monthly_budget: $json.monthly_budget,\\n      desired_timing: $json.desired_timing,\\n      lead_id: $json.lead_id,\\n      followup_attempt: $json.attempt_number,\\n      followup_first_at: $json.first_attempt_at,\\n      followup_last_at: $json.last_attempt_at\\n    }\\n  }\\n}) }}\",\n        \"options\": {\n          \"timeout\": 120000\n        }\n      },\n      \"id\": \"434c5ca7-4734-4077-99d9-31dc7b9afd34\",\n      \"name\": \"ElevenLabs Outbound Call\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 4.2,\n      \"position\": [\n        1900,\n        500\n      ],\n      \"retryOnFail\": false,\n      \"credentials\": {\n        \"httpHeaderAuth\": {\n          \"id\": \"g6w66UlOLzbF9aCM\",\n          \"name\": \"Elevenlabs - Outbound Call\"\n        }\n      },\n      \"notes\": \"SIP/Telnyx. Dial only after weekday guard. No HTTP retries: ambiguous initiation requires manual review. Verified no-answer callbacks schedule at most two retries.\"\n    },\n    {\n      \"id\": \"be2c77a1-e2d3-4f29-b7d1-a95ca475b7a7\",\n      \"name\": \"Record call initiation\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        1300,\n        240\n      ],\n      \"parameters\": {\n        \"jsCode\": \"const b=$('Final call window guard').item.json; if(!$json.conversation_id)throw Error('Unknown initiation result; inspect before retrying');return [{json:{lead_id:b.lead_id,attempt_number:b.attempt_number,first_attempt_at:b.first_attempt_at,last_attempt_at:b.last_attempt_at,conversation_id:$json.conversation_id,call_status:'initiated'}}];\"\n      }\n    }\n  ],\n  \"connections\": {\n    \"Input\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Plan call\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Plan call\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Send delayed lead email?\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Send delayed lead email?\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Delayed lead email\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"Wait for call window\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Delayed lead email\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Restore call plan\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Restore call plan\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Wait for call window\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Wait for call window\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Read lead stop status\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Read lead stop status\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Check stop status\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Check stop status\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Call still allowed?\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Call still allowed?\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Final call window guard\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Final call window guard\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Inside call window?\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Inside call window?\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"ElevenLabs Outbound Call\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"Wait for call window\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"ElevenLabs Outbound Call\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Record call initiation\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    }\n  },\n  \"settings\": {\n    \"executionOrder\": \"v1\",\n    \"timezone\": \"Europe/Budapest\"\n  },\n  \"active\": false,\n  \"pinData\": {}\n}",
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "fb02729b-2b94-4c32-a69c-6c81ef0b1fa7",
+      "name": "Start retry call",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        6944,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json: $('Prepare confirmation').first().json}];"
+      },
+      "id": "45cd1609-9730-4ebb-9be1-72924c254180",
+      "name": "Prepare reminder worker",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8576,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "source": "parameter",
+        "workflowJson": "{\n  \"name\": \"Lead Call - consultation reminder worker\",\n  \"nodes\": [\n    {\n      \"id\": \"aa4769c2-6c4b-40a9-9b8b-99e56584ed29\",\n      \"name\": \"Input\",\n      \"type\": \"n8n-nodes-base.executeWorkflowTrigger\",\n      \"typeVersion\": 1.1,\n      \"position\": [\n        0,\n        0\n      ],\n      \"parameters\": {\n        \"inputSource\": \"passthrough\"\n      }\n    },\n    {\n      \"id\": \"e8545c67-e3a5-4896-bf23-a988156e5c57\",\n      \"name\": \"Reminder input\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        260,\n        0\n      ],\n      \"parameters\": {\n        \"jsCode\": \"const b=$json;return [{json:{...b,reminder_created_at:new Date().toISOString()}}];\"\n      }\n    },\n    {\n      \"id\": \"345fe32c-6b6a-4347-96c4-f10392f58928\",\n      \"name\": \"Read current appointment\",\n      \"type\": \"n8n-nodes-base.googleCalendar\",\n      \"typeVersion\": 1.3,\n      \"position\": [\n        520,\n        0\n      ],\n      \"parameters\": {\n        \"operation\": \"get\",\n        \"calendar\": {\n          \"__rl\": true,\n          \"value\": \"convertedweb@gmail.com\",\n          \"mode\": \"list\",\n          \"cachedResultName\": \"convertedweb@gmail.com\"\n        },\n        \"eventId\": \"={{$(\\\"Reminder input\\\").first().json.calendar_event_id}}\",\n        \"options\": {}\n      },\n      \"credentials\": {\n        \"googleCalendarOAuth2Api\": {\n          \"id\": \"kaLMn1u5LQ4JPDL6\",\n          \"name\": \"Google Calendar account\"\n        }\n      },\n      \"onError\": \"continueRegularOutput\",\n      \"alwaysOutputData\": true\n    },\n    {\n      \"id\": \"bad8f376-2f5d-41d1-b340-17e5c6c5324f\",\n      \"name\": \"Evaluate reminder\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [\n        780,\n        0\n      ],\n      \"parameters\": {\n        \"jsCode\": \"\\nconst ZONE = 'Europe/Budapest';\\nfunction parts(date) { return Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(date)).map(p=>[p.type,p.value])); }\\nfunction localDate(y,m,d,h=0,min=0) {\\n  const target=Date.UTC(y,m-1,d,h,min); let guess=target;\\n  for(let i=0;i<4;i++) {const p=parts(guess); const wall=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);const diff=target-wall;if(!diff)return new Date(guess);guess+=diff;}\\n  throw Error('Nem egyértelmű helyi időpont.');\\n}\\nfunction timestamp(value) {\\n  if(typeof value !== 'string') return NaN;\\n  const m=value.match(/^(\\\\d{4})-(\\\\d{2})-(\\\\d{2})T(\\\\d{2}):(\\\\d{2}):(\\\\d{2})(?:\\\\.\\\\d{1,3})?(Z|[+-]\\\\d{2}:\\\\d{2})$/);\\n  if(!m) return NaN;\\n  const [y,mo,d,h,mi,s]=m.slice(1,7).map(Number), civil=new Date(Date.UTC(y,mo-1,d));\\n  if(civil.getUTCFullYear()!==y||civil.getUTCMonth()!==mo-1||civil.getUTCDate()!==d||h>23||mi>59||s>59) return NaN;\\n  return Date.parse(value);\\n}\\nfunction eventTime(value) {\\n  if(value?.dateTime) return timestamp(value.dateTime);\\n  if(value?.date) {const [y,m,d]=value.date.split('-').map(Number);return +localDate(y,m,d);}\\n  return NaN;\\n}\\nfunction busy(events,start,end) {\\n  for(const e of events) {\\n    if(e.error) throw Error('calendar_unavailable');\\n    if(!Object.keys(e).length||e.status==='cancelled'||e.transparency==='transparent') continue;\\n    const a=eventTime(e.start),b=eventTime(e.end);\\n    if(!Number.isFinite(a)||!Number.isFinite(b)||b<=a) throw Error('invalid_calendar_event');\\n    if(start<b&&end>a) return true;\\n  } return false;\\n}\\nfunction format(value) { const p=parts(value);return p.year+'.'+p.month+'.'+p.day+'. '+p.hour+':'+p.minute; }\\n\\n\\nconst b=$('Reminder input').first().json,e=$json;\\nif(e.error)throw Error('Reminder calendar read failed; manual review required');\\nif(e.status==='cancelled')return [];\\nif(!e.id||e.id!==b.calendar_event_id)throw Error('Unexpected calendar event');\\nconst start=eventTime(e.start),end=eventTime(e.end),now=Date.now(),due=start-2*60*60000;\\nif(!Number.isFinite(start)||!Number.isFinite(end)||end-start!==30*60000)return [];\\nif(start<=now||Date.parse(b.reminder_created_at)>=due)return [];\\nconst attendee=(e.attendees||[]).find(a=>String(a.email).toLowerCase()===b.email.toLowerCase());\\nif(!attendee||attendee.responseStatus==='declined')return [];\\nconst ready=now>=due;\\n// Do not send stale reminders after extended outages (maximum 5-minute lateness).\\nif(ready&&now-due>5*60000)return [];\\nreturn [{json:{...b,send_reminder:ready,next_check_at:new Date(Math.min(due,now+5*60000)).toISOString(),appointment_time:format(start),booking_link:e.hangoutLink||e.conferenceData?.entryPoints?.find(x=>x.entryPointType==='video')?.uri||'',calendar_link:e.htmlLink||''}}];\"\n      }\n    },\n    {\n      \"id\": \"96ccca9b-ccfc-4070-b255-81c1bf173678\",\n      \"name\": \"Reminder due?\",\n      \"type\": \"n8n-nodes-base.if\",\n      \"typeVersion\": 2.2,\n      \"position\": [\n        1040,\n        0\n      ],\n      \"parameters\": {\n        \"conditions\": {\n          \"options\": {\n            \"caseSensitive\": true,\n            \"leftValue\": \"\",\n            \"typeValidation\": \"strict\",\n            \"version\": 2\n          },\n          \"conditions\": [\n            {\n              \"id\": \"50ea50fb-c2f2-4ab0-ad33-e8a3999d56f2\",\n              \"leftValue\": \"={{$json.send_reminder}}\",\n              \"rightValue\": true,\n              \"operator\": {\n                \"type\": \"boolean\",\n                \"operation\": \"true\",\n                \"singleValue\": true\n              }\n            }\n          ],\n          \"combinator\": \"and\"\n        },\n        \"options\": {}\n      }\n    },\n    {\n      \"id\": \"71274797-25b1-4287-901a-ff6e7ea06e2d\",\n      \"name\": \"Wait for reminder check\",\n      \"type\": \"n8n-nodes-base.wait\",\n      \"typeVersion\": 1.1,\n      \"position\": [\n        1300,\n        0\n      ],\n      \"parameters\": {\n        \"resume\": \"specificTime\",\n        \"dateTime\": \"={{$json.next_check_at}}\"\n      },\n      \"webhookId\": \"f006b706-6ab7-4fbe-883c-da19ef47c243\"\n    },\n    {\n      \"id\": \"175dd3a1-c84d-4f7e-9ef3-cd6cf08e5402\",\n      \"name\": \"Email consultation reminder\",\n      \"type\": \"n8n-nodes-base.gmail\",\n      \"typeVersion\": 2.1,\n      \"position\": [\n        1560,\n        0\n      ],\n      \"parameters\": {\n        \"sendTo\": \"={{$json.email}}\",\n        \"subject\": \"Emlékeztető – online konzultáció 2 óra múlva\",\n        \"emailType\": \"text\",\n        \"message\": \"={{ 'Kedves ' + $json.name + '!\\\\n\\\\nKözeleg a 30 perces online konzultáció: ' + $json.appointment_time + ' (budapesti idő).\\\\n' + ($json.booking_link ? 'Google Meet: '+$json.booking_link : 'A csatlakozási linket a naptármeghívóban találja. '+$json.calendar_link) + '\\\\n\\\\nHa nem tud részt venni, kérjük, válaszoljon erre az emailre.\\\\n\\\\nÜdvözlettel: ConvertedWeb' }}\",\n        \"options\": {}\n      },\n      \"credentials\": {\n        \"gmailOAuth2\": {\n          \"id\": \"r4oEPgpMc7kSM1wA\",\n          \"name\": \"CONVERTEDWEB - Gmail\"\n        }\n      },\n      \"retryOnFail\": false\n    }\n  ],\n  \"connections\": {\n    \"Input\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Reminder input\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Reminder input\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Read current appointment\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Read current appointment\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Evaluate reminder\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Evaluate reminder\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Reminder due?\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Reminder due?\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Email consultation reminder\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"Wait for reminder check\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Wait for reminder check\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Read current appointment\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    }\n  },\n  \"settings\": {\n    \"executionOrder\": \"v1\",\n    \"timezone\": \"Europe/Budapest\"\n  },\n  \"active\": false,\n  \"pinData\": {}\n}",
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "9a250c95-6031-46e5-9b07-68537a44d391",
+      "name": "Start consultation reminder",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        8832,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "convertedweb@gmail.com, honorbert@gmail.com",
+        "subject": "={{ 'Új ' + ($json.source === 'website_form' ? 'weboldal' : 'Facebook') + ' lead érkezett – ' + $json.lead_name }}",
+        "emailType": "text",
+        "message": "={{ 'Új érdeklődő érkezett a ' + ($json.source === 'website_form' ? 'weboldal' : 'Facebook') + ' űrlapról.\\n\\nNév: ' + $json.lead_name + '\\nTelefon: ' + $json.phone + '\\nEmail: ' + $json.email + '\\nCég: ' + $json.company_name + '\\nTelefonhívások problémája: ' + $json.call_handling_problem + '\\nVállalkozási terület: ' + $json.industry + '\\nMegoldás keresésének időzítése: ' + $json.desired_timing + '\\nHavi keret: ' + $json.monthly_budget + '\\nDöntési szerep: ' + $json.decision_role + '\\n\\nLead ID: ' + $json.lead_id }}",
+        "options": {}
+      },
+      "id": "99148250-ef46-437d-bd34-d09568632faa",
+      "name": "Email new lead notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        5648,
+        1168
+      ],
+      "retryOnFail": false,
+      "webhookId": "88752dae-3b34-4e1e-962f-914763702cfa",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "r4oEPgpMc7kSM1wA",
+          "name": "CONVERTEDWEB - Gmail"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "sendTo": "convertedweb@gmail.com, honorbert@gmail.com",
+        "subject": "={{ 'Új konzultáció lefoglalva – ' + $json.name }}",
+        "emailType": "text",
+        "message": "={{ 'Új 30 perces online konzultáció lett lefoglalva.\\n\\nNév: ' + $json.name + '\\nTelefon: ' + $json.phone + '\\nEmail: ' + $json.email + '\\nCég: ' + $json.company + '\\nIdőpont: ' + $json.consultation_start_iso + '\\nMeet-link: ' + ($json.booking_link || 'A Meet-link még nem érhető el') + '\\n\\nÖsszefoglaló:\\n' + ($json.brief || '') }}",
+        "options": {}
+      },
+      "id": "db64253f-987c-47b7-86a3-e14ecc1122c4",
+      "name": "Email booking notification to owner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        7472,
+        288
+      ],
+      "retryOnFail": false,
+      "webhookId": "d028cc3f-01b2-424d-b4bb-78da98eb9ef0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "r4oEPgpMc7kSM1wA",
+          "name": "CONVERTEDWEB - Gmail"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "website-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        1500
+      ],
+      "id": "b454dd03-5e02-4ee9-98c0-0a9344941a00",
+      "name": "Website Lead Webhook",
+      "webhookId": "84fce7a9-1941-4276-a0ff-21444aaa4d80"
+    },
+    {
+      "parameters": {
+        "jsCode": "let secret;try{secret=$env.WEBSITE_LEAD_WEBHOOK_SECRET;}catch(e){}\nconst crypto=require('crypto');\nconst fail=(status,reason)=>[{json:{accepted:false,success:false,http_status:status,reason}}];\nif(!secret)return fail(503,'webhook_secret_not_configured');\nconst item=$input.first().json,h=item.headers||{},b=item.body;\nconst hash=v=>crypto.createHash('sha256').update(String(v)).digest();\nif(!crypto.timingSafeEqual(hash(h['x-lead-secret']||''),hash(secret)))return fail(401,'unauthorized');\nif(!b||typeof b!=='object'||Array.isArray(b))return fail(400,'invalid_body');\n// honeypot: robotok kitöltik, emberek nem látják; csendben eldobjuk\nif(String(b.website_url||b.hp||'').trim())return [{json:{accepted:false,success:true,http_status:200,reason:'ignored'}}];\nconst clean=(v,max=300)=>String(v==null?'':v).replace(/[\\u0000-\\u001f\\u007f]/g,' ').replace(/\\s+/g,' ').trim().slice(0,max);\nconst consent=/^(true|1|on|yes|igen)$/i.test(String(b.consent));\nif(!consent)return fail(422,'consent_required');\nlet phone=clean(b.phone_number||b.phone,40).replace(/[\\s().-]/g,'').replace(/^p:/,'');\nif(phone.startsWith('00'))phone='+'+phone.slice(2);\nelse if(phone.startsWith('06'))phone='+36'+phone.slice(2);\nelse if(/^36\\d{8,9}$/.test(phone))phone='+'+phone;\nelse if(/^\\d{8,9}$/.test(phone))phone='+36'+phone;\nif(!/^\\+[1-9]\\d{7,14}$/.test(phone)||(/^\\+36/.test(phone)&&!/^\\+36\\d{8,9}$/.test(phone)))return fail(422,'invalid_phone');\nconst email=clean(b.email,200).toLowerCase();\nif(email&&!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return fail(422,'invalid_email');\nconst day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Budapest'}).format(new Date());\n// azonos telefonszám ugyanazon a napon ugyanazt a lead ID-t kapja (duplikáció-védelem)\nconst id='w:'+crypto.createHash('sha256').update(phone+'|'+day).digest('hex').slice(0,20);\nreturn [{json:{\n  accepted:true,id,created_time:new Date().toISOString(),\n  full_name:clean(b.full_name||b.name,120),email,phone_number:phone,company_name:clean(b.company_name||b.company,160),\n  'mi_a_legnagyobb_problémáid_jelenleg_a_telefonhívások_kezelésével?':clean(b.message||b.call_handling_problem,1000),\n  'melyik_területen_működik_a_vállalkozásod?':clean(b.industry,200),\n  'mekkora_havi_keretet_tudnál_erre_fordítani?':clean(b.monthly_budget,100),\n  'hogyan_írnád_le_a_szereped_a_döntésben?':clean(b.decision_role,100),\n  'mikor_szeretnél_megoldást_találni?':clean(b.desired_timing,100),\n  form_id:'website',__source:'website_form',page_url:clean(b.page_url,500)\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3860,
+        1500
+      ],
+      "id": "a2d7c2ab-ee7d-498b-a668-f36ba70d93e3",
+      "name": "Prepare website lead"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0d35d944-a4fb-4849-91a7-cea34834f141",
+              "leftValue": "={{$json.accepted}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4120,
+        1500
+      ],
+      "id": "a62423a1-45f8-4c7b-bbff-518ddb5fb987",
+      "name": "Website lead accepted?"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8",
+          "mode": "list",
+          "cachedResultName": "AI recepcios 02",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8/edit?usp=sharing"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "leads",
+          "mode": "name",
+          "cachedResultName": "leads"
+        },
+        "options": {}
+      },
+      "id": "1a026405-d283-4685-aa09-fe0e071d6279",
+      "name": "Read leads sheet (duplicate check)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        4380,
+        1380
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "twL7qLUNIo1nyie5",
+          "name": "CONVERTEDWEB - Google Service"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead=$('Prepare website lead').first().json,rows=$input.all().map(x=>x.json);\nif(rows.some(x=>x.error))return [{json:{...lead,sheet_ok:false,duplicate:false,success:false,http_status:503,reason:'sheet_unavailable'}}];\nconst duplicate=rows.some(r=>String(r.id||'').trim()===lead.id);\nreturn [{json:{...lead,sheet_ok:true,duplicate,success:true,http_status:200,reason:duplicate?'duplicate':'accepted'}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4640,
+        1380
+      ],
+      "id": "6cb71db4-e6fc-40c5-833a-ff66b9e36bc5",
+      "name": "Check website duplicate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3d61b3ac-7590-40f7-8396-8dab7c3078c8",
+              "leftValue": "={{$json.duplicate === false && $json.sheet_ok === true}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4900,
+        1380
+      ],
+      "id": "12d0aba0-83f2-403c-af7e-1b1cb4411d3b",
+      "name": "Website lead is new?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: $json.success === true, status: $json.reason || '' } }}",
+        "options": {
+          "responseCode": "={{$json.http_status || 200}}"
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        5160,
+        1620
+      ],
+      "id": "1394ba46-e7bb-4bc6-906a-4ff87f4223e7",
+      "name": "Respond website lead"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8",
+          "mode": "list",
+          "cachedResultName": "AI recepcios 02",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1R74mewTB6QPvDgrG9Tar8pxgCD6e4lgWxUPf-fHqjh8/edit?usp=sharing"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "leads",
+          "mode": "name",
+          "cachedResultName": "leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{$json.id}}",
+            "created_time": "={{$json.created_time}}",
+            "full_name": "={{$json.full_name}}",
+            "email": "={{$json.email}}",
+            "phone_number": "={{$json.phone_number}}",
+            "company_name": "={{$json.company_name}}",
+            "status": "new"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        5160,
+        1260
+      ],
+      "id": "9a8c9c24-be68-4946-9012-7299396e79c6",
+      "name": "Append website lead row",
+      "credentials": {
+        "googleApi": {
+          "id": "twL7qLUNIo1nyie5",
+          "name": "CONVERTEDWEB - Google Service"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Facebook Lead Ads Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Sheet Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Sheet Lead": {
+      "main": [
+        [
+          {
+            "node": "Start scheduled call",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email new lead notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "checkAvailability Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build consultation candidate slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build consultation candidate slots": {
+      "main": [
+        [
+          {
+            "node": "Get consultation calendar events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get consultation calendar events": {
+      "main": [
+        [
+          {
+            "node": "Filter free slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter free slots": {
+      "main": [
+        [
+          {
+            "node": "Respond checkAvailability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "saveIntake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize intake": {
+      "main": [
+        [
+          {
+            "node": "Intake valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intake valid?": {
+      "main": [
+        [
+          {
+            "node": "Recheck requested slot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond saveIntake error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recheck requested slot": {
+      "main": [
+        [
+          {
+            "node": "Requested slot free",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requested slot free": {
+      "main": [
+        [
+          {
+            "node": "Requested slot available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requested slot available?": {
+      "main": [
+        [
+          {
+            "node": "Create consultation calendar event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond saveIntake error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create consultation calendar event": {
+      "main": [
+        [
+          {
+            "node": "Prepare consultation row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare consultation row": {
+      "main": [
+        [
+          {
+            "node": "Booking confirmed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking confirmed?": {
+      "main": [
+        [
+          {
+            "node": "Find source Sheet row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond saveIntake error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find source Sheet row": {
+      "main": [
+        [
+          {
+            "node": "Match source Sheet row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match source Sheet row": {
+      "main": [
+        [
+          {
+            "node": "Source row matched?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source row matched?": {
+      "main": [
+        [
+          {
+            "node": "Update lead booking in Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update lead booking in Sheet": {
+      "main": [
+        [
+          {
+            "node": "Prepare confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare confirmation": {
+      "main": [
+        [
+          {
+            "node": "Meet link ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meet link ready?": {
+      "main": [
+        [
+          {
+            "node": "Email consultation confirmation to caller",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email booking notification to owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email consultation confirmation to caller": {
+      "main": [
+        [
+          {
+            "node": "Email booking notification to owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record notification outcome": {
+      "main": [
+        [
+          {
+            "node": "Final booking response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final booking response": {
+      "main": [
+        [
+          {
+            "node": "Respond saveIntake success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ElevenLabs failure Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify call result signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify call result signature": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge call result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get failed conversation": {
+      "main": [
+        [
+          {
+            "node": "Plan unanswered retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan unanswered retry": {
+      "main": [
+        [
+          {
+            "node": "Start retry call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond saveIntake success": {
+      "main": [
+        [
+          {
+            "node": "Prepare reminder worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare reminder worker": {
+      "main": [
+        [
+          {
+            "node": "Start consultation reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retryable call failure?": {
+      "main": [
+        [
+          {
+            "node": "Get failed conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email booking notification to owner": {
+      "main": [
+        [
+          {
+            "node": "Record notification outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Website Lead Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare website lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare website lead": {
+      "main": [
+        [
+          {
+            "node": "Website lead accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Website lead accepted?": {
+      "main": [
+        [
+          {
+            "node": "Read leads sheet (duplicate check)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond website lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read leads sheet (duplicate check)": {
+      "main": [
+        [
+          {
+            "node": "Check website duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check website duplicate": {
+      "main": [
+        [
+          {
+            "node": "Website lead is new?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Website lead is new?": {
+      "main": [
+        [
+          {
+            "node": "Respond website lead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append website lead row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Normalize Sheet Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond website lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a6095e13-651f-47aa-95dc-117006c992a7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "73b3bbd4c9eadd772c2bc6a6afbc531f31ecd5bc5fa44352ca8342a7aad7a96a"
+  },
+  "nodeGroups": [],
+  "id": "bJuIr4XN7mS91WMQy4Gep",
+  "tags": [
+    {
+      "updatedAt": "2026-05-24T12:11:59.041Z",
+      "createdAt": "2026-05-24T12:11:59.041Z",
+      "id": "4sTkLk708w5hK1se",
+      "name": "facebook-leads"
+    }
+  ]
+}
