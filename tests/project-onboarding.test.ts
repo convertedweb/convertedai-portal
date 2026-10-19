@@ -57,7 +57,13 @@ test("onetimesecret links accept only https onetimesecret.com hosts", async () =
   assert.equal(normalizeSecretUrl("https://onetimesecret.com.evil.io/x"), null);
   assert.equal(isValidAccountEmail("ugyfel@ceg.hu"), true);
   assert.equal(isValidAccountEmail("nem-email"), false);
-  assert.ok(onboardingAccountCatalog.every((account) => account.guide?.steps.length === 4 && account.guide.steps[2].title.toLowerCase().includes("onetimesecret") && account.guide.steps[3].title === "Adatok megadása"));
+  // az általános útmutató négy lépés (3.: onetimesecret, 4.: adatok megadása); az ElevenLabsé egyedi, képernyőkhöz kötött
+  const generic = onboardingAccountCatalog.filter((account) => account.key !== "elevenlabs");
+  assert.ok(generic.every((account) => account.guide?.steps.length === 4 && account.guide.steps[2].title.toLowerCase().includes("onetimesecret") && account.guide.steps[3].title === "Adatok megadása"));
+  const elevenlabs = onboardingAccountCatalog.find((account) => account.key === "elevenlabs");
+  assert.equal(elevenlabs?.guide?.steps.length, 11);
+  assert.ok(elevenlabs?.guide?.steps.every((step) => step.image.startsWith("/onboarding/elevenlabs/elevenlabs_") && step.image.endsWith(".webp")));
+  assert.ok(elevenlabs?.guide?.steps.every((step) => !step.link || step.text.includes(step.link.label)));
 });
 
 test("required onboarding state needs accounts, assistant settings and knowledge", () => {
