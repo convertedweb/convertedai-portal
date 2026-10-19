@@ -298,3 +298,15 @@ A Meta lead hívó asszisztensek többűrlapos leadforrás-kezelésének külső
 ## Forgalom fül átrendezése (2026-10-18)
 
 - `app/portal/agents/[id]/project-tabs.tsx` `usage` fül: felül hónapválasztó, 3 kártya (Felhasznált idő / Aktuális maradék / Becsült költség), alatta bal oldalon Havi bontás + Részletes lista (táblázat), jobb oldalon (csak superadmin) „Keret és percdíj” űrlap. Ügyfélnézetben az űrlap nélkül egy oszlop. Új `usage-*` CSS a `globals.css`-ben; a meglévő stílusok megmaradtak. `tsc` sikeres, böngészős vizuális ellenőrzés nem történt. Nincs commitolva.
+
+## Deploy (2026-10-19)
+
+- Commit `d9ad7ef` (onboarding, forráslinkek, telefonszám-választás, Forgalom fül) pusholva a `master`-re; a `Build and publish container` workflow (build + SSH deploy) elindult.
+- Éles `client-portal` Supabase: mind a 7 új migráció alkalmazva. A `20261008183524_add_project_source_links` kézzel, a dashboard SQL szerkesztőjében futott (RLS be, 3 policy, `anon` hozzáférés nincs); ezért a migrációs listában nem biztos, hogy szerepel ezen a néven, `supabase db push` előtt ellenőrizd.
+- Adatot nem másoltunk; a helyi és az éles app ugyanarra a Supabase projektre mutat.
+- Helyi környezet: a `node_modules`, `.next` és `.next-dev` a `~/.cache/voice-agent-app/` alatt van, szimbolikus linkkel (Synology Drive-konfliktusok miatt). A Synology a linket „Conflict" névre nevezheti át. Tartós megoldás: a projektmappa kizárása a szinkronból.
+- Nincs commitolva: `next-env.d.ts`, `.claude/`, `public/ads/`.
+
+## Onboarding az ügyfél Áttekintés oldalán (2026-10-19)
+
+- Az `/portal` Áttekintés oldalon, ha az ügyfélnek van `draft` státuszú hangasszisztens projektje (design/weboldal nem), az első ilyen projekt onboarding felülete (`OnboardingFlow`) a statisztikák fölött megjelenik. Nincs átirányítás a belépéskor (a korábbi, auth route-os megoldást elvetettük). Adatok: `app/portal/page.tsx`. `tsc` sikeres, bejelentkezett kézi teszt nem történt, nincs commitolva/deployolva.
