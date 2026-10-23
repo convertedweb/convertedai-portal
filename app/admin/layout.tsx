@@ -7,6 +7,9 @@ import { getAdminProjects } from "@/lib/admin-data";
 import { getAdminSupportAlertCount } from "@/lib/support";
 import { getAdminTasks } from "@/lib/tasks";
 import { getActiveImpersonation } from "@/lib/impersonation";
+import { getCurrentAdminAccess } from "@/lib/admin-permissions";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { HeaderTimer } from "./header-timer";
 
 export const metadata: Metadata = {
   title: "norpheus AI Admin",
@@ -17,6 +20,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
   const supportAlertCount = isAdmin ? await getAdminSupportAlertCount() : 0;
   const tasks = isAdmin ? getAdminTasks(projects) : [];
   const notificationCount = tasks.length + supportAlertCount;
+  const runningTimer = isAdmin ? await getRunningTimer() : null;
   const initials = getInitials(userName);
 
   return (
@@ -29,7 +33,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
         </div>
       </aside>
       <main className="main">
-        <DashboardHeader label="Admin felület" notificationCount={notificationCount} notificationHref="/admin/notifications" signOutNext="/admin" />
+        <DashboardHeader label="Admin felület" notificationCount={notificationCount} notificationHref="/admin/notifications" signOutNext="/admin">{runningTimer && <HeaderTimer startedAt={runningTimer.startedAt} taskId={runningTimer.taskId} taskTitle={runningTimer.taskTitle} />}</DashboardHeader>
         {impersonation && <ImpersonationBanner actorEmail={impersonation.actorEmail} actorName={impersonation.actorName} />}
         {children}
       </main>
@@ -41,4 +45,19 @@ function getInitials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return "A";
   return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
+}
+
+async function getRunningTimer() {
+  const access = await getCurrentAdminAccess();
+  const adminSupabase = createAdminClient();
+  if (!access.user || !adminSupabase) return null;
+  const { data } = await adminSupabase
+    .from("task_time_entries")
+    .select("task_id, started_at, tasks(title, deleted_at)")
+    .eq("user_id", access.user.id)
+    .is("ended_at", null)
+    .maybeSingle();
+  const task = Array.isArray(data?.tasks) ? data.tasks[0] : data?.tasks;
+  if (!data || !task || task.deleted_at) return null;
+  return { startedAt: data.started_at as string, taskId: data.task_id as string, taskTitle: task.title as string };
 }

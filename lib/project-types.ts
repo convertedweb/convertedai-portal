@@ -1,7 +1,8 @@
 export type ProjectStatus = "draft" | "review_requested" | "building" | "live" | "paused" | "archived";
 export type ProjectCategory = "chatbot" | "voice_agent" | "meta_lead_caller" | "automation" | "ui_ux_design" | "website";
 export type TelnyxStatus = "pending" | "requested" | "connected" | "linked_to_voice_agent" | "failed";
-export type PhoneRequestType = "hu_21" | "local_company" | "local_private";
+export type PhoneRequestType = "hu_21" | "local_company" | "local_private" | "existing" | "local";
+export type PhoneOwnerType = "company" | "sole_trader" | "private";
 export type GoogleAccessStatus = "not_provided" | "submitted" | "checking" | "working" | "failed";
 export type DocumentProcessingStatus = "uploaded" | "processing" | "ready" | "failed";
 export type ElevenLabsAgentStatus = "not_created" | "creating" | "created" | "failed";
@@ -13,6 +14,8 @@ export type Project = {
   category: ProjectCategory;
   phoneNumber: string | null;
   phoneRequestType: PhoneRequestType | null;
+  // Az onboardingban választott tulajdonos; régi körzetes projekteknél a típusból következik (lib/phone-documents.ts).
+  phoneOwnerType?: PhoneOwnerType | null;
   phoneDocumentsReceived: boolean;
   googleAccountEmail: string | null;
   googlePasswordShareUrl: string | null;
@@ -36,6 +39,8 @@ export type Project = {
   plannedLaunchDate: string | null;
   launchedAt: string | null;
   launchedAtInput: string | null;
+  // Az indítás időpontja unix másodpercben (a percek számolásának kezdete); nincs megadva: null.
+  launchedAtUnix?: number | null;
   createdAt: string;
   updatedAt: string;
   documents: number;
@@ -68,7 +73,7 @@ export const categoryLabels: Record<ProjectCategory, string> = {
   meta_lead_caller: "Meta lead hívó asszisztens",
   automation: "AI automatizáció",
   ui_ux_design: "UI/UX design",
-  website: "Weboldal",
+  website: "Weboldal / webdesign",
 };
 
 export const telnyxStatusLabels: Record<TelnyxStatus, string> = {
@@ -80,9 +85,11 @@ export const telnyxStatusLabels: Record<TelnyxStatus, string> = {
 };
 
 export const phoneRequestLabels: Record<PhoneRequestType, string> = {
-  hu_21: "06 21-es szám",
+  hu_21: "06 21-es országos szám",
   local_company: "Saját körzetes szám - céges",
   local_private: "Saját körzetes szám - magánszemély",
+  existing: "Meglévő szám (korábbi választás)",
+  local: "Új körzetes szám",
 };
 
 export const googleAccessStatusLabels: Record<GoogleAccessStatus, string> = {

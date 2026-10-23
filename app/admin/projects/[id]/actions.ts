@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { logAdminActivity } from "@/lib/activity-log";
 import { canManageProjects, getCurrentAdminAccess } from "@/lib/admin-permissions";
 import { createElevenLabsAgent, deleteElevenLabsConversation, updateElevenLabsKnowledgeBaseDocument } from "@/lib/elevenlabs";
+import { isOnboardingAccountKey } from "@/lib/onboarding-accounts";
+import { isAssistantFieldKey, resolveAssistantFields } from "@/lib/onboarding-fields";
 import type { GoogleAccessStatus, ProjectCategory, ProjectStatus, TelnyxStatus } from "@/lib/project-types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -195,7 +197,8 @@ export async function updateProjectSettings(_previousState: ProjectAdminActionSt
   const name = requiredText(formData.get("projectName"));
   const category = parseProjectCategory(formData.get("category"));
   const currentStatus = parseProjectStatus(formData.get("currentStatus"));
-  const plannedLaunchDate = optionalDate(formData.get("plannedLaunchDate"));
+  // „Projekt létrehozás” dátum: szerkeszthető, a planned_launch_date oszlopban tárolva (nem a rendszer created_at értéke).
+  const projectCreatedOn = optionalDate(formData.get("projectCreatedOn"));
   const launchedAt = currentStatus === "live" ? optionalDateTime(formData.get("launchedAt")) : null;
 
   if (!projectId || !customerId || !name || !category || !currentStatus) {
@@ -213,7 +216,7 @@ export async function updateProjectSettings(_previousState: ProjectAdminActionSt
     .update({
       name,
       category,
-      planned_launch_date: plannedLaunchDate,
+      planned_launch_date: projectCreatedOn,
       launched_at: launchedAt,
       updated_at: new Date().toISOString(),
     })
@@ -235,7 +238,7 @@ export async function updateProjectSettings(_previousState: ProjectAdminActionSt
     projectId,
     title: "Projekt részletek módosítva",
     description: name,
-    metadata: { category, launchedAt, name, plannedLaunchDate },
+    metadata: { category, launchedAt, name, projectCreatedOn },
   });
 
   revalidatePath("/admin");
@@ -367,67 +370,6 @@ export async function updateProjectPhone(_previousState: ProjectAdminActionState
     title: "Telefonos kapcsolat módosítva",
     description: phoneNumber ?? "Nincs telefonszám",
     metadata: { phoneDocumentsReceived, phoneNumber, telnyxStatus },
-  });
-
-  revalidatePath("/admin");
-  revalidatePath("/admin/projects");
-  revalidatePath(`/admin/customers/${customerId}/edit`);
-  revalidatePath(`/admin/projects/${projectId}`);
-  revalidatePath("/portal");
-  revalidatePath("/portal/projects");
-  revalidatePath(`/portal/agents/${projectId}`);
-
-  redirect(getProjectRedirect(projectId, source));
-}
-
-export async function updateProjectGoogleAccess(_previousState: ProjectAdminActionState, formData: FormData) {
-  const projectId = requiredText(formData.get("projectId"));
-  const customerId = requiredText(formData.get("customerId"));
-  const source = requiredText(formData.get("source"));
-  const googleAccountEmail = requiredText(formData.get("googleAccountEmail")) || null;
-  const googlePasswordShareUrl = requiredText(formData.get("googlePasswordShareUrl")) || null;
-  const googleAccessStatus = parseGoogleAccessStatus(formData.get("googleAccessStatus"));
-  const googleAccessRequired = formData.get("googleAccessRequired") === "on";
-
-  if (!projectId || !customerId || !googleAccessStatus) {
-    return { error: "A projekt azonosító és a Google hozzáférés státusz kötelező." };
-  }
-
-  const adminCheck = await assertSuperAdmin();
-  if ("error" in adminCheck) return { error: adminCheck.error };
-
-  const adminAccess = getAdminSupabase();
-  if ("error" in adminAccess) return { error: adminAccess.error };
-
-  const { data: project, error: projectError } = await adminAccess.adminSupabase
-    .from("projects")
-    .update({
-      google_account_email: googleAccountEmail,
-      google_password_share_url: googlePasswordShareUrl,
-      google_access_confirmed: Boolean(googleAccountEmail && googlePasswordShareUrl),
-      google_access_status: googleAccessStatus,
-      google_access_required: googleAccessRequired,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", projectId)
-    .eq("organization_id", customerId)
-    .is("deleted_at", null)
-    .select("id")
-    .single();
-
-  if (projectError || !project) {
-    console.error("Project Google access update failed", projectError);
-    return { error: "Nem sikerült menteni a Google hozzáférést." };
-  }
-
-  await logAdminActivity({
-    actorUserId: adminCheck.user.id,
-    eventType: "admin_project_google_access_updated",
-    organizationId: customerId,
-    projectId,
-    title: "Google hozzáférés módosítva",
-    description: googleAccountEmail ?? "Nincs Google fiók",
-    metadata: { googleAccessRequired, googleAccessStatus, googleAccountEmail, hasPasswordShareUrl: Boolean(googlePasswordShareUrl) },
   });
 
   revalidatePath("/admin");
@@ -820,4 +762,152 @@ export async function deleteProjectConversation(_previousState: ProjectAdminActi
   revalidatePath(`/portal/agents/${projectId}`);
 
   return { success: "Beszélgetés törölve." };
+}
+
+export async function updateOnboardingAccounts(_previousState: ProjectAdminActionState, formData: FormData) {
+  const projectId = requiredText(formData.get("projectId"));
+  const customerId = requiredText(formData.get("customerId"));
+  const accounts = formData.getAll("accounts").filter((value): value is string => typeof value === "string" && isOnboardingAccountKey(value));
+
+  if (!projectId || !customerId) return { error: "Hiányzik a projekt vagy ügyfél azonosító." };
+
+  const adminCheck = await assertSuperAdmin();
+  if ("error" in adminCheck) return { error: adminCheck.error };
+
+  const adminAccess = getAdminSupabase();
+  if ("error" in adminAccess) return { error: adminAccess.error };
+
+  const { data: project, error } = await adminAccess.adminSupabase
+    .from("projects")
+    .update({ onboarding_accounts: accounts })
+    .eq("id", projectId)
+    .eq("organization_id", customerId)
+    .is("deleted_at", null)
+    .select("id")
+    .single();
+
+  if (error || !project) {
+    console.error("Onboarding accounts update failed", error);
+    return { error: "Nem sikerült menteni a fiókokat (az adatbázis-migráció alkalmazva van?)." };
+  }
+
+  await logAdminActivity({
+    actorUserId: adminCheck.user.id,
+    eventType: "admin_onboarding_accounts_updated",
+    organizationId: customerId,
+    projectId,
+    title: "Onboarding fiókok módosítva",
+    description: accounts.join(", ") || "Nincs fiók",
+  });
+  revalidatePath(`/admin/projects/${projectId}`);
+  revalidatePath(`/portal/projects/${projectId}/onboarding`);
+  return { success: "Fiókok elmentve." };
+}
+
+export async function updateOnboardingFields(_previousState: ProjectAdminActionState, formData: FormData) {
+  const projectId = requiredText(formData.get("projectId"));
+  const customerId = requiredText(formData.get("customerId"));
+  const assistantFields = resolveAssistantFields(formData.getAll("assistantFields").filter((value): value is string => typeof value === "string" && isAssistantFieldKey(value)));
+
+  if (!projectId || !customerId) return { error: "Hiányzik a projekt vagy ügyfél azonosító." };
+
+  const adminCheck = await assertSuperAdmin();
+  if ("error" in adminCheck) return { error: adminCheck.error };
+
+  const adminAccess = getAdminSupabase();
+  if ("error" in adminAccess) return { error: adminAccess.error };
+
+  const { data: current, error: readError } = await adminAccess.adminSupabase
+    .from("projects")
+    .select("onboarding_field_config")
+    .eq("id", projectId)
+    .eq("organization_id", customerId)
+    .is("deleted_at", null)
+    .single();
+  if (readError || !current) {
+    console.error("Onboarding fields read failed", readError);
+    return { error: "Nem sikerült menteni a mezőket (az adatbázis-migráció alkalmazva van?)." };
+  }
+
+  const { error } = await adminAccess.adminSupabase
+    .from("projects")
+    .update({ onboarding_field_config: { ...(current.onboarding_field_config ?? {}), assistant: assistantFields } })
+    .eq("id", projectId)
+    .eq("organization_id", customerId)
+    .is("deleted_at", null);
+  if (error) {
+    console.error("Onboarding fields update failed", error);
+    return { error: "Nem sikerült menteni a mezőket." };
+  }
+
+  await logAdminActivity({
+    actorUserId: adminCheck.user.id,
+    eventType: "admin_onboarding_fields_updated",
+    organizationId: customerId,
+    projectId,
+    title: "Onboarding mezők módosítva",
+    description: `Asszisztens beállítások: ${assistantFields.join(", ")}`,
+  });
+  revalidatePath(`/admin/projects/${projectId}`);
+  revalidatePath(`/portal/projects/${projectId}/onboarding`);
+  return { success: "Mezők elmentve." };
+}
+
+export async function updateProjectGoogleAccess(_previousState: ProjectAdminActionState, formData: FormData) {
+  const projectId = requiredText(formData.get("projectId"));
+  const customerId = requiredText(formData.get("customerId"));
+  const source = requiredText(formData.get("source"));
+  const googleAccountEmail = requiredText(formData.get("googleAccountEmail")) || null;
+  const googlePasswordShareUrl = requiredText(formData.get("googlePasswordShareUrl")) || null;
+  const googleAccessStatus = parseGoogleAccessStatus(formData.get("googleAccessStatus"));
+
+  if (!projectId || !customerId || !googleAccessStatus) {
+    return { error: "A projekt azonosító és a Google hozzáférés státusz kötelező." };
+  }
+
+  const adminCheck = await assertSuperAdmin();
+  if ("error" in adminCheck) return { error: adminCheck.error };
+
+  const adminAccess = getAdminSupabase();
+  if ("error" in adminAccess) return { error: adminAccess.error };
+
+  const { data: project, error: projectError } = await adminAccess.adminSupabase
+    .from("projects")
+    .update({
+      google_account_email: googleAccountEmail,
+      google_password_share_url: googlePasswordShareUrl,
+      google_access_confirmed: Boolean(googleAccountEmail && googlePasswordShareUrl),
+      google_access_status: googleAccessStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", projectId)
+    .eq("organization_id", customerId)
+    .is("deleted_at", null)
+    .select("id")
+    .single();
+
+  if (projectError || !project) {
+    console.error("Project Google access update failed", projectError);
+    return { error: "Nem sikerült menteni a Google hozzáférést." };
+  }
+
+  await logAdminActivity({
+    actorUserId: adminCheck.user.id,
+    eventType: "admin_project_google_access_updated",
+    organizationId: customerId,
+    projectId,
+    title: "Google hozzáférés módosítva",
+    description: googleAccountEmail ?? "Nincs Google fiók",
+    metadata: { googleAccessStatus, googleAccountEmail, hasPasswordShareUrl: Boolean(googlePasswordShareUrl) },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/projects");
+  revalidatePath(`/admin/customers/${customerId}/edit`);
+  revalidatePath(`/admin/projects/${projectId}`);
+  revalidatePath("/portal");
+  revalidatePath("/portal/projects");
+  revalidatePath(`/portal/agents/${projectId}`);
+
+  redirect(getProjectRedirect(projectId, source));
 }

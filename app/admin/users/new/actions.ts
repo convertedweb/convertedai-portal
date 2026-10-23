@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { canManageProjects, getCurrentAdminAccess } from "@/lib/admin-permissions";
+import { getOrgMemberLimitError } from "@/lib/org-member-limits";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type CreateUserState = {
@@ -59,6 +60,11 @@ export async function createUser(_previousState: CreateUserState, formData: Form
 
   let userId: string | null = null;
   let invited = false;
+  if (role === "client_owner" || role === "client_member") {
+    const limitError = await getOrgMemberLimitError(adminSupabase, customerId, role);
+    if (limitError) return { error: limitError };
+  }
+
   const { data: inviteData, error: inviteError } = await adminSupabase.auth.admin.inviteUserByEmail(email, {
     data: { full_name: fullName, name: fullName },
     redirectTo: `${getSiteUrl()}${role === "admin" ? "/admin" : "/portal"}`,
@@ -120,6 +126,7 @@ export async function createUser(_previousState: CreateUserState, formData: Form
 
     if (memberError) {
       console.error("Customer member upsert failed", memberError);
+      if (memberError.message.includes("org_member_limit") || memberError.code === "23505") return { error: "Az ügyfél tagjainak száma elérte a limitet (1 tulajdonos, 2 munkatárs)." };
       return { error: "A felhasználó elkészült, de nem sikerült hozzárendelni a Clienthez." };
     }
   }

@@ -6,6 +6,7 @@ import { logAdminActivity } from "@/lib/activity-log";
 import { canEditCustomers, canInviteCustomerUsers, canManageProjects, getCurrentAdminAccess } from "@/lib/admin-permissions";
 import type { InvoiceStatus, InvoiceType, OrganizationStatus } from "@/lib/admin-data";
 import type { GoogleAccessStatus, PhoneRequestType, ProjectCategory, ProjectStatus, TelnyxStatus } from "@/lib/project-types";
+import { getOrgMemberLimitError } from "@/lib/org-member-limits";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -240,6 +241,13 @@ export async function inviteCustomerMember(_previousState: InviteCustomerMemberS
     return { error: "Nem található ez az ügyfél." };
   }
 
+  const limitError = await getOrgMemberLimitError(adminSupabase, customerId, role);
+  if (limitError) {
+    const existingUser = await findUserByEmail(email);
+    const stillOverLimit = existingUser ? await getOrgMemberLimitError(adminSupabase, customerId, role, existingUser.id) : limitError;
+    if (stillOverLimit) return { error: stillOverLimit };
+  }
+
   let userId: string | null = null;
   let invited = false;
   const { data: inviteData, error: inviteError } = await adminSupabase.auth.admin.inviteUserByEmail(email, {
@@ -276,6 +284,7 @@ export async function inviteCustomerMember(_previousState: InviteCustomerMemberS
 
   if (memberError) {
     console.error("Customer member upsert failed", memberError);
+    if (memberError.message.includes("org_member_limit") || memberError.code === "23505") return { error: "Az ügyfél tagjainak száma elérte a limitet (1 tulajdonos, 2 munkatárs)." };
     return { error: "A meghívó elkészült, de a felhasználót nem sikerült az ügyfélhez rendelni." };
   }
 
@@ -522,7 +531,6 @@ export async function deleteCustomerMember(
 
 export async function createAdminProject(_previousState: CreateAdminProjectState, formData: FormData) {
   const customerId = requiredText(formData.get("customerId"));
-  const companyName = requiredText(formData.get("companyName"));
   const projectName = requiredText(formData.get("projectName"));
   const category = parseProjectCategory(formData.get("category"));
   const isPhoneAgent = category === "voice_agent" || category === "meta_lead_caller";
@@ -536,10 +544,10 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
   const googlePasswordShareUrl = requiredText(formData.get("googlePasswordShareUrl")) || null;
   const googleAccessStatus = isDeliveryProject ? "not_provided" : parseGoogleAccessStatus(formData.get("googleAccessStatus"));
   const googleAccessRequired = isDeliveryProject ? false : formData.get("googleAccessRequired") === "on";
-  const plannedLaunchDate = optionalDate(formData.get("plannedLaunchDate"));
+  const projectCreatedOn = optionalDate(formData.get("projectCreatedOn"));
 
-  if (!customerId || !companyName || !projectName) {
-    return { error: "Az ügyfél, cég és projekt neve kötelező." };
+  if (!customerId || !projectName) {
+    return { error: "Az ügyfél és a projekt neve kötelező." };
   }
 
   if ((isPhoneAgent || category === "chatbot") && !agentName) {
@@ -556,7 +564,7 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
 
   const { data: organization, error: organizationError } = await adminSupabase
     .from("organizations")
-    .select("id")
+    .select("id, company_name, name")
     .eq("id", customerId)
     .is("deleted_at", null)
     .single();
@@ -564,6 +572,8 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
   if (organizationError || !organization) {
     return { error: "Nem található ez az ügyfél." };
   }
+
+  const companyName = organization.company_name || organization.name;
 
   const { data: project, error: projectError } = await adminSupabase
     .from("projects")
@@ -582,7 +592,7 @@ export async function createAdminProject(_previousState: CreateAdminProjectState
       google_access_confirmed: isDeliveryProject ? false : Boolean(googleAccountEmail && googlePasswordShareUrl),
       google_access_status: googleAccessStatus,
       google_access_required: googleAccessRequired,
-      planned_launch_date: plannedLaunchDate,
+      planned_launch_date: projectCreatedOn,
     })
     .select("id")
     .single();

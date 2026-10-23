@@ -32,12 +32,15 @@ function LoginForm() {
     const { error: authError } = await supabase.auth.signInWithOtp({
       email,
       options: {
-          emailRedirectTo: confirmUrl.toString(),
+        emailRedirectTo: confirmUrl.toString(),
+        shouldCreateUser: false,
       },
     });
 
     if (authError) {
-      if (authError.code === "over_email_send_rate_limit" || authError.status === 429) {
+      if (authError.code === "otp_disabled" || authError.message.toLowerCase().includes("signups not allowed")) {
+        setError("Ehhez az e-mail címhez nincs fiók. Kérj meghívót az adminisztrátortól.");
+      } else if (authError.code === "over_email_send_rate_limit" || authError.status === 429) {
         setError("Túl sok belépési linket kértünk rövid idő alatt. Várj néhány percet, majd próbáld újra.");
       } else {
         setError(`Nem sikerült elküldeni a belépési linket. Supabase hiba: ${authError.message}`);

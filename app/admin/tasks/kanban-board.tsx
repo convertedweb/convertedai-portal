@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Flag, GripVertical, ListTodo } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, GripVertical, ListTodo, UserRound } from "lucide-react";
 import Link from "next/link";
 import { type DragEvent, useEffect, useState } from "react";
 import type { ProjectManagementTask, TaskStatus } from "@/lib/project-management";
@@ -26,7 +26,7 @@ function truncateDescription(description: string) {
   return `${description.slice(0, taskDescriptionMaxLength).trimEnd()}…`;
 }
 
-export function KanbanBoard({ initialTasks }: { initialTasks: ProjectManagementTask[] }) {
+export function KanbanBoard({ assigneeNames, initialTasks }: { assigneeNames: Record<string, string>; initialTasks: ProjectManagementTask[] }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [collapsedStatuses, setCollapsedStatuses] = useState<Set<(typeof taskStatuses)[number]>>(
     () => new Set(taskStatuses.filter((status) => !initialTasks.some((task) => task.status === status))),
@@ -147,6 +147,7 @@ export function KanbanBoard({ initialTasks }: { initialTasks: ProjectManagementT
                         </div>
                         {task.description && <p title={task.description}>{truncateDescription(task.description)}</p>}
                         <div className="pm-task-context"><strong>{task.customerName}</strong><span>{task.projectName}</span></div>
+                        {task.assignee_user_id && <span className="pm-task-assignee"><UserRound size={12} />{assigneeNames[task.assignee_user_id] ?? "Ismeretlen"}</span>}
                         <time className="pm-task-card-date" dateTime={task.created_at}>{dateFormatter.format(new Date(task.created_at))}</time>
                         <div className="pm-task-meta">
                           {task.priority !== "normal" && <span className={`priority-label ${task.priority}`}><Flag size={11} />{priorityLabels[task.priority]}</span>}

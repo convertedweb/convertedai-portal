@@ -230,6 +230,43 @@ export async function moveTask(taskId: string, requestedStatus: string): Promise
   return { success: "A feladat áthelyezve." };
 }
 
+export async function moveTaskDueDate(taskId: string, dueDate: string): Promise<TaskActionState> {
+  if (!taskId || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return { error: "Érvénytelen feladat vagy dátum." };
+
+  const access = await getCurrentAdminAccess();
+  if (!access.user || !access.role) return { error: "A művelethez admin jogosultság szükséges." };
+  const adminSupabase = createAdminClient();
+  if (!adminSupabase) return { error: "Hiányzik a Supabase szerveroldali kulcs." };
+
+  const { data: currentTask } = await adminSupabase.from("tasks").select("due_at, start_date, visibility, organizations(superadmin_only)").eq("id", taskId).is("deleted_at", null).maybeSingle();
+  const organization = Array.isArray(currentTask?.organizations) ? currentTask.organizations[0] : currentTask?.organizations;
+  if (!currentTask || ((currentTask.visibility === "superadmin_only" || organization?.superadmin_only) && access.role !== "superadmin")) {
+    return { error: "A feladat nem található vagy nincs hozzá jogosultságod." };
+  }
+  const dateError = parseDateRange(currentTask.start_date ?? "", dueDate);
+  if (dateError) return { error: "A határidő nem lehet a kezdő dátum előtt." };
+
+  const nextDueAt = new Date(`${dueDate}T23:59:59`).toISOString();
+  const { data: task, error } = await adminSupabase.from("tasks").update({ due_at: nextDueAt }).eq("id", taskId).is("deleted_at", null).select("id, organization_id, project_id, title, priority, status, visibility").maybeSingle();
+  if (error || !task) {
+    console.error("Task due date move failed", error);
+    return { error: "Nem sikerült módosítani a határidőt." };
+  }
+
+  await logAdminActivity({
+    actorUserId: access.user.id,
+    description: task.title,
+    eventType: "task_updated",
+    metadata: { changes: { dueAt: { from: currentTask.due_at, to: nextDueAt } }, priority: task.priority, source: "calendar_drag", status: task.status, taskId: task.id, visibility: task.visibility },
+    organizationId: task.organization_id,
+    projectId: task.project_id,
+    title: "Feladat határideje módosítva a naptárban",
+  });
+  revalidatePath("/admin/tasks");
+  revalidatePath(`/admin/tasks/${task.id}`);
+  return { success: "A határidő módosítva." };
+}
+
 export async function updateTask(_previousState: TaskActionState, formData: FormData): Promise<TaskActionState> {
   const taskId = text(formData.get("taskId"));
   const customerId = text(formData.get("customerId"));
@@ -241,6 +278,7 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
   const visibility = parseVisibility(text(formData.get("visibility")));
   const dueDate = text(formData.get("dueDate"));
   const startDate = text(formData.get("startDate"));
+  const assigneeUserId = text(formData.get("assigneeUserId")) || null;
 
   if (!taskId || (!customerId && !projectId) || !title || !status || !priority) return { error: "Az ügyfél, a cím, a státusz és a prioritás kötelező." };
   if (title.length > 300) return { error: "A feladat címe legfeljebb 300 karakter lehet." };
@@ -255,9 +293,16 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
   const adminSupabase = createAdminClient();
   if (!adminSupabase) return { error: "Hiányzik a Supabase szerveroldali kulcs." };
 
-  const { data: currentTask } = await adminSupabase.from("tasks").select("id, organization_id, project_id, source_ticket_id, title, description, status, priority, visibility, due_at, start_date").eq("id", taskId).is("deleted_at", null).maybeSingle();
+  const { data: currentTask } = await adminSupabase.from("tasks").select("id, organization_id, project_id, source_ticket_id, assignee_user_id, title, description, status, priority, visibility, due_at, start_date").eq("id", taskId).is("deleted_at", null).maybeSingle();
   if (!currentTask) return { error: "A feladat nem található." };
   if (currentTask.visibility === "superadmin_only" && access.role !== "superadmin") return { error: "A feladat nem található vagy nincs hozzá jogosultságod." };
+  if (assigneeUserId && assigneeUserId !== currentTask.assignee_user_id) {
+    const [{ data: adminRole }, { data: superadmin }] = await Promise.all([
+      adminSupabase.from("admin_roles").select("user_id").eq("user_id", assigneeUserId).limit(1).maybeSingle(),
+      adminSupabase.from("super_admins").select("user_id").eq("user_id", assigneeUserId).limit(1).maybeSingle(),
+    ]);
+    if (!adminRole && !superadmin) return { error: "A kiválasztott felelős nem admin felhasználó." };
+  }
   const resolved = await resolveTaskScope(adminSupabase, access.role, customerId, projectId);
   if ("error" in resolved) return { error: resolved.error };
   const { organizationId, project } = resolved;
@@ -268,6 +313,7 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
   const nextDueAt = dueDate ? new Date(`${dueDate}T23:59:59`).toISOString() : null;
   const { data: task, error } = await adminSupabase.from("tasks").update({
     completed_at: status === "done" ? new Date().toISOString() : null,
+    assignee_user_id: assigneeUserId,
     description,
     due_at: nextDueAt,
     organization_id: organizationId,
@@ -286,6 +332,7 @@ export async function updateTask(_previousState: TaskActionState, formData: Form
 
   const changes: Record<string, { from: string | null; to: string | null }> = {};
   if (currentTask.project_id !== (project?.id ?? null)) changes.projectId = { from: currentTask.project_id, to: project?.id ?? null };
+  if ((currentTask.assignee_user_id ?? null) !== assigneeUserId) changes.assigneeUserId = { from: currentTask.assignee_user_id ?? null, to: assigneeUserId };
   if (currentTask.title !== title) changes.title = { from: currentTask.title, to: title };
   if (currentTask.description !== description) changes.description = { from: currentTask.description, to: description };
   if (currentTask.status !== status) changes.status = { from: currentTask.status, to: status };

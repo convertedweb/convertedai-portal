@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calculateUsageCostHuf, getUsageMonthKey, summarizeMonthlyUsage } from "../lib/usage";
+import { calculateUsageCostHuf, filterUsageSince, getUsageMonthKey, summarizeMonthlyUsage } from "../lib/usage";
 
 test("monthly usage groups calls in Budapest time and preserves exact seconds", () => {
   const marchEndUtc = Date.parse("2026-03-31T22:30:00Z") / 1000;
@@ -32,3 +32,15 @@ test("current month appears even without calls", () => {
   const summary = summarizeMonthlyUsage([], "2026-10");
   assert.deepEqual(summary.monthItems, [{ key: "2026-10", conversationCount: 0, seconds: 0 }]);
 });
+
+test("a perceket csak az indítás időpontjától számoljuk", () => {
+  const conversations = [
+    { callDurationSecs: 60, startTimeUnix: 1_000 },
+    { callDurationSecs: 120, startTimeUnix: 2_000 },
+    { callDurationSecs: 30, startTimeUnix: null },
+  ];
+  assert.deepEqual(filterUsageSince(conversations, 1_500).map((item) => item.callDurationSecs), [120]);
+  assert.deepEqual(filterUsageSince(conversations, 2_000).map((item) => item.callDurationSecs), [120]);
+  assert.deepEqual(filterUsageSince(conversations, null), []);
+});
+

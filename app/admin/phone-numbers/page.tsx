@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getAdminProjects } from "@/lib/admin-data";
 import { canViewPhoneNumbers, getAdminRoleLabel } from "@/lib/admin-permissions";
 import { telnyxStatusLabels } from "@/lib/data";
+import { getTelnyxUsageByMonth, normalizePhone } from "@/lib/telnyx";
 
 export default async function AdminPhoneNumbersPage() {
   const { adminPermissions, adminRole, isAdmin, projects, userEmail } = await getAdminProjects();
@@ -40,6 +41,28 @@ export default async function AdminPhoneNumbersPage() {
       </section>
     );
   }
+
+  const { months, error: telnyxError } = await getTelnyxUsageByMonth(phoneProjects.map((project) => ({ number: project.phoneNumber ?? "", since: project.launchedAtIso })));
+  const customers = new Map<string, { name: string; numbers: string[] }>();
+  for (const project of phoneProjects) {
+    const row = customers.get(project.customerId) ?? { name: project.customerName, numbers: [] };
+    row.numbers.push(normalizePhone(project.phoneNumber));
+    customers.set(project.customerId, row);
+  }
+  const sumFor = (numbers: string[], monthKeys: string[]) => {
+    let secs = 0;
+    let cost = 0;
+    for (const key of monthKeys) {
+      for (const number of numbers) {
+        const usage = months.get(key)?.get(number);
+        secs += usage?.billedSecs ?? 0;
+        cost += usage?.cost ?? 0;
+      }
+    }
+    return { cost, minutes: Math.ceil(secs / 60) };
+  };
+  const monthKeys = [...months.keys()].sort().reverse();
+  const costTables = [{ keys: monthKeys, title: "Összesen (eddig)" }, ...monthKeys.map((key) => ({ keys: [key], title: key }))];
 
   return (
     <section className="content">
@@ -83,6 +106,32 @@ export default async function AdminPhoneNumbersPage() {
           <div className="empty-state">Még nincs létrehozott telefonszám.</div>
         )}
       </div>
+
+      <div className="page-intro">
+        <div>
+          <h2>Telnyx költség</h2>
+          <p className="intro-copy">A Telnyx által számlázott percek és költség (USD) ügyfelenként, havi bontásban (budapesti idő szerint), a projektek telefonszáma alapján. Csak a projekt „Indítás ideje” utáni hívásokat számoljuk; indítási idő nélküli projektnél még nincs szám.</p>
+        </div>
+      </div>
+      {telnyxError ? <div className="empty-state">{telnyxError}</div> : costTables.map((table) => (
+        <div className="admin-table" key={table.title}>
+          <div className="admin-table-head admin-telnyx-cost-row">
+            <span>{table.title}</span>
+            <span>Számlázott perc</span>
+            <span>Költség</span>
+          </div>
+          {[...customers.values()].map((customer) => {
+            const total = sumFor(customer.numbers, table.keys);
+            return (
+              <div className="admin-table-row admin-telnyx-cost-row" key={customer.name}>
+                <div className="detail-value">{customer.name}</div>
+                <div className="detail-value">{total.minutes} perc</div>
+                <div className="detail-value">{total.cost.toFixed(2)} USD</div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </section>
   );
 }
