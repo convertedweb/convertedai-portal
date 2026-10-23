@@ -1116,10 +1116,13 @@ h2 { font-size: 21px; font-weight: 500; }
 .date-filter-popover-actions button:hover { background: var(--color-rgba-104-117-232-p12); color: var(--color-hex-c8ceff); }
 .compact-filter-reset { justify-self: start; min-height: 42px; white-space: nowrap; }
 .usage-summary-grid { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.usage-summary-grid .agent-scorecard { gap: 10px; }
+.usage-summary-grid .agent-scorecard span, .usage-summary-grid .agent-scorecard small { line-height: 1.6; }
+.usage-summary-grid .agent-scorecard strong { line-height: 1.4; }
 .usage-month-picker { align-items: flex-end; display: flex; gap: 20px; justify-content: space-between; margin: 0 0 16px; }
 .usage-month-picker .field { max-width: 260px; width: 100%; }
 .usage-month-picker > span, .usage-cost-note { color: var(--muted); font-size: 12px; }
-.usage-cost-note { margin: 12px 0 0; }
+.usage-cost-note { line-height: 1.7; margin: 18px 0 0; }
 .usage-list-values { align-items: flex-end; display: flex; flex-direction: column; gap: 4px; min-width: 0; text-align: right; }
 .usage-list-values span { margin: 0; }
 .usage-list-values strong { overflow-wrap: anywhere; }

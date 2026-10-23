@@ -973,7 +973,7 @@ export function ProjectTabs({ accountsPanel, onboardingPanel, adminSettings, kno
                 </div>
                 <p className="usage-cost-note">
                   {project.launchedAtUnix ? `A projekt indulása (${project.launchedAt}) óta: ` : "Az indítás ideje még nincs megadva. Összesen: "}
-                  {formatMinuteValue(usageSummary.totalSeconds)} · {usageSummary.totalConversationCount} beszélgetés
+                  {formatMinuteValue(usageSummary.totalSeconds)} · {usageSummary.totalConversationCount} beszélgetés · összes becsült költség: {formatCostHuf(calculateUsageCostHuf(usageSummary.totalSeconds, project.minuteRateHuf))}
                 </p>
               </>}
               <div className={`usage-layout${canEditProject && adminSettings ? " has-aside" : ""}`}>
