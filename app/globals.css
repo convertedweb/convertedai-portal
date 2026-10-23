@@ -2542,3 +2542,4 @@ button.task-calendar-more:hover { color: var(--teal); }
 .log-pager > span { color: var(--muted); font-size: 12px; font-weight: 500; }
 .log-pager > div { display: flex; gap: 8px; }
 .log-pager .disabled { cursor: default; opacity: .55; }
+.log-small { font-size: 12px; }

@@ -274,7 +274,7 @@ export default async function AdminLogsPage({ searchParams }: { searchParams: Pr
               <div><strong>{item.targetName}</strong><span>{item.targetEmail}</span></div>
             </div>
             <div className="customer-cell compact-cell"><div><strong>{item.actorName}</strong><span>{item.actorEmail}</span></div></div>
-            <span>{item.targetRole}</span>
+            <span className="log-small">{item.targetRole}</span>
             <span className="access-status">{item.status}</span>
             <span className="detail-value">{item.createdAt}</span>
           </div>
@@ -307,8 +307,8 @@ export default async function AdminLogsPage({ searchParams }: { searchParams: Pr
               <div><strong>{item.title}</strong><span>{item.description || item.eventType}</span></div>
             </div>
             <div className="customer-cell compact-cell"><div><strong>{item.actorName}</strong><span>{item.actorEmail}</span></div></div>
-            <span>{item.clientName}</span>
-            <span>{item.projectName}</span>
+            <span className="log-small">{item.clientName}</span>
+            <span className="log-small">{item.projectName}</span>
             <span className="detail-value">{item.createdAt}</span>
           </div>
         )) : (
@@ -341,7 +341,7 @@ export default async function AdminLogsPage({ searchParams }: { searchParams: Pr
               <div><strong>{item.name}</strong><span>{item.email}</span></div>
             </div>
             <span className="access-status">{item.role}</span>
-            <span>{item.clientName}</span>
+            <span className="log-small">{item.clientName}</span>
             <span className="detail-value"><Activity size={14} />{item.lastSignInAt}</span>
             <span className="detail-value">{item.createdAt}</span>
             <span className="detail-value">{item.updatedAt}</span>
