@@ -14,7 +14,8 @@ type AdminNotification = TaskItem & {
   type: "project" | "support";
 };
 
-export default async function AdminNotificationsPage() {
+export default async function AdminNotificationsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab } = await searchParams;
   const { adminRole, isAdmin, projects, userEmail } = await getAdminProjects();
 
   if (!isAdmin) {
@@ -63,7 +64,8 @@ export default async function AdminNotificationsPage() {
   const notifications = [...supportNotifications, ...projectNotifications];
 
   // Csak superadminnak: a rendszer által kiküldött értesítő e-mailek.
-  const sentEmails = adminRole === "superadmin"
+  const showEmails = adminRole === "superadmin" && tab === "emails";
+  const sentEmails = showEmails
     ? ((await createAdminClient()?.from("activity_logs").select("id, title, description, created_at, project_id").eq("event_type", "email_sent").order("created_at", { ascending: false }).limit(20))?.data ?? [])
     : [];
   const projectNames = new Map(projects.map((project) => [project.id, project.name]));
@@ -79,7 +81,14 @@ export default async function AdminNotificationsPage() {
         <div className="projects-count">{notifications.length} értesítés</div>
       </div>
 
-      {notifications.length ? (
+      {adminRole === "superadmin" && (
+        <div className="tabs-list" role="tablist">
+          <Link aria-selected={!showEmails} className={`tab-button${showEmails ? "" : " active"}`} href="/admin/notifications" role="tab">Értesítések</Link>
+          <Link aria-selected={showEmails} className={`tab-button${showEmails ? " active" : ""}`} href="/admin/notifications?tab=emails" role="tab">Kiküldött e-mailek</Link>
+        </div>
+      )}
+
+      {showEmails ? null : notifications.length ? (
         <div className="task-list notification-list">
           {notifications.map((notification) => {
             const taskDescription = `Értesítésből létrehozva: ${notification.detail}`;
@@ -119,14 +128,9 @@ export default async function AdminNotificationsPage() {
         </div>
       )}
 
-      {adminRole === "superadmin" && (
+      {showEmails && (
         <>
-          <div className="page-intro">
-            <div>
-              <h2>Kiküldött e-mailek</h2>
-              <p className="intro-copy">Az utolsó 20 értesítő e-mail, amit a rendszer ügyfeleknek vagy adminoknak küldött.</p>
-            </div>
-          </div>
+          <p className="intro-copy">Az utolsó 20 értesítő e-mail, amit a rendszer ügyfeleknek vagy adminoknak küldött.</p>
           {sentEmails.length ? (
             <div className="task-list notification-list">
               {sentEmails.map((email) => (
