@@ -19,21 +19,23 @@ async function resolveOrganizationId(adminSupabase: NonNullable<ReturnType<typeo
   return null;
 }
 
+// mode: archive | restore | delete. A "törölt" értesítés a nézetekből végleg eltűnik (notification_deleted), mert az értesítések az adatokból számolódnak, így magát nem lehet kitörölni.
 export async function setNotificationArchived(formData: FormData) {
-  const key = String(formData.get("notificationKey") ?? "").trim();
-  const archive = formData.get("archive") === "1";
-  if (!key || key.length > 300) return;
+  const keys = [...new Set(formData.getAll("notificationKey").map((value) => String(value).trim()).filter((key) => key && key.length <= 300))].slice(0, 200);
+  const mode = formData.get("mode") ?? (formData.get("archive") === "1" ? "archive" : "restore");
+  if (!keys.length || (mode !== "archive" && mode !== "restore" && mode !== "delete")) return;
 
   const access = await getCurrentAdminAccess();
   if (!access.user || !access.role) return;
   const adminSupabase = createAdminClient();
   if (!adminSupabase) return;
 
-  if (archive) {
-    const organizationId = await resolveOrganizationId(adminSupabase, key);
-    if (!organizationId) return;
-    const { data: existing } = await adminSupabase.from("activity_logs").select("id").eq("event_type", "notification_archived").filter("metadata->>notificationKey", "eq", key).limit(1);
-    if (!existing?.length) {
+  for (const key of keys) {
+    if (mode === "archive") {
+      const organizationId = await resolveOrganizationId(adminSupabase, key);
+      if (!organizationId) continue;
+      const { data: existing } = await adminSupabase.from("activity_logs").select("id").in("event_type", ["notification_archived", "notification_deleted"]).filter("metadata->>notificationKey", "eq", key).limit(1);
+      if (existing?.length) continue;
       const { error } = await adminSupabase.from("activity_logs").insert({
         actor_role: "admin",
         actor_user_id: access.user.id,
@@ -43,10 +45,14 @@ export async function setNotificationArchived(formData: FormData) {
         title: "Értesítés archiválva",
       });
       if (error) console.error("Notification archive failed", error);
+    } else if (mode === "restore") {
+      const { error } = await adminSupabase.from("activity_logs").delete().eq("event_type", "notification_archived").filter("metadata->>notificationKey", "eq", key);
+      if (error) console.error("Notification restore failed", error);
+    } else {
+      // csak archivált értesítés törölhető
+      const { error } = await adminSupabase.from("activity_logs").update({ event_type: "notification_deleted", title: "Értesítés törölve" }).eq("event_type", "notification_archived").filter("metadata->>notificationKey", "eq", key);
+      if (error) console.error("Notification delete failed", error);
     }
-  } else {
-    const { error } = await adminSupabase.from("activity_logs").delete().eq("event_type", "notification_archived").filter("metadata->>notificationKey", "eq", key);
-    if (error) console.error("Notification restore failed", error);
   }
   revalidatePath("/admin/notifications");
 }
