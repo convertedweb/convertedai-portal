@@ -254,11 +254,6 @@ export default async function AdminLogsPage({ searchParams }: { searchParams: Pr
       </div>
 
       {tab === "logins" && <>
-      <div className="section-heading permissions-heading">
-        <h2>Superadmin belépési napló</h2>
-        <span>{impersonationLogs.length} esemény</span>
-      </div>
-
       <div className="admin-table users-section-table">
         <div className="admin-table-head admin-impersonation-log-row">
           <span>Célfiók</span>
@@ -287,11 +282,6 @@ export default async function AdminLogsPage({ searchParams }: { searchParams: Pr
       </>}
 
       {tab === "activity" && <>
-      <div className="section-heading permissions-heading">
-        <h2>Ügyfél aktivitások</h2>
-        <span>{activityLogs.length} esemény</span>
-      </div>
-
       <div className="admin-table users-section-table">
         <div className="admin-table-head admin-activity-table-row">
           <span>Esemény</span>
@@ -320,11 +310,6 @@ export default async function AdminLogsPage({ searchParams }: { searchParams: Pr
       </>}
 
       {tab === "users" && <>
-      <div className="section-heading permissions-heading">
-        <h2>Felhasználói belépési állapot</h2>
-        <span>{logs.length} felhasználó</span>
-      </div>
-
       <div className="admin-table">
         <div className="admin-table-head admin-logs-table-row">
           <span>Felhasználó</span>
