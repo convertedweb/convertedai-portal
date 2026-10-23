@@ -74,7 +74,15 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
           .map((row) => [(row.metadata as { resend_id?: string } | null)?.resend_id ?? "", row.created_at as string] as [string, string])
       : [],
   );
+  const visits = showEmails
+    ? ((await createAdminClient()?.from("activity_logs").select("project_id, created_at").eq("event_type", "email_visited").order("created_at", { ascending: true }).limit(500))?.data ?? [])
+    : [];
   const dateTime = (value: string) => new Intl.DateTimeFormat("hu-HU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  // Az e-mail után a linkről érkező első belépés ideje ugyanarra a projektre.
+  const firstVisit = (projectId: string | null, sentAt: string) => {
+    const visit = visits.find((item) => item.project_id === projectId && item.created_at >= sentAt);
+    return visit ? `Belépett a linkről: ${dateTime(visit.created_at)}` : null;
+  };
   const projectNames = new Map(projects.map((project) => [project.id, project.name]));
 
   return (
@@ -146,7 +154,7 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
                     <div className="task-icon"><Mail size={18} /></div>
                     <div>
                       <strong>{email.title}</strong>
-                      <span>{[email.project_id ? projectNames.get(email.project_id) : null, email.description, dateTime(email.created_at), clickedAt.has((email.metadata as { resend_id?: string } | null)?.resend_id ?? "") ? `Rákattintott: ${dateTime(clickedAt.get((email.metadata as { resend_id: string }).resend_id) as string)}` : null].filter(Boolean).join(" · ")}</span>
+                      <span>{[email.project_id ? projectNames.get(email.project_id) : null, email.description, dateTime(email.created_at), clickedAt.has((email.metadata as { resend_id?: string } | null)?.resend_id ?? "") ? `Rákattintott: ${dateTime(clickedAt.get((email.metadata as { resend_id: string }).resend_id) as string)}` : null, firstVisit(email.project_id, email.created_at)].filter(Boolean).join(" · ")}</span>
                     </div>
                   </div>
                 </article>

@@ -71,7 +71,7 @@ async function run(request: Request) {
     if (!recipients.length) { results.push({ project: row.id, sent: 0, reason: "no_recipients", missing }); continue; }
     if (dry) { results.push({ project: row.id, sent: 0, reason: "dry_run", missing }); continue; }
 
-    const email = buildReminderEmail({ daysLeft: onboardingDeadlineDays - daysSince(start), items: missing, projectName: row.name, url: `${getSiteUrl()}/portal/projects/${row.id}/onboarding` });
+    const email = buildReminderEmail({ daysLeft: onboardingDeadlineDays - daysSince(start), items: missing, projectName: row.name, url: `${getSiteUrl()}/portal/projects/${row.id}/onboarding?ref=reminder` });
     const { sent } = await sendNotificationEmail({ ...email, record: { organizationId: row.organization_id, projectId: row.id }, to: recipients });
     results.push({ project: row.id, sent: sent ? recipients.length : 0, missing });
   }
