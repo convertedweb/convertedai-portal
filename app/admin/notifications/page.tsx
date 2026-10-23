@@ -63,11 +63,11 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
           type: "support",
         }))
     : [];
-  const allNotifications = [...supportNotifications, ...projectNotifications].filter((notification) => !deletedKeys.has(notification.notificationKey));
   const { data: archivedRows } = (await createAdminClient()?.from("activity_logs").select("event_type, metadata").in("event_type", ["notification_archived", "notification_deleted"])) ?? { data: [] };
   const keyOf = (row: { metadata: unknown }) => (row.metadata as { notificationKey?: string } | null)?.notificationKey;
   const archivedKeys = new Set((archivedRows ?? []).filter((row) => row.event_type === "notification_archived").map(keyOf).filter(Boolean));
   const deletedKeys = new Set((archivedRows ?? []).filter((row) => row.event_type === "notification_deleted").map(keyOf).filter(Boolean));
+  const allNotifications = [...supportNotifications, ...projectNotifications].filter((notification) => !deletedKeys.has(notification.notificationKey));
   const showArchived = tab === "archived";
   const notifications = allNotifications.filter((notification) => !archivedKeys.has(notification.notificationKey));
   const archivedNotifications = allNotifications.filter((notification) => archivedKeys.has(notification.notificationKey));
