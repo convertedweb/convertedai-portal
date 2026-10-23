@@ -1,10 +1,11 @@
-import { ArrowRight, Bell, CheckCircle2, CirclePause, Mail, MessageSquareText } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowRight, Bell, CheckCircle2, CirclePause, Mail, MessageSquareText } from "lucide-react";
 import Link from "next/link";
 import { getAdminProjects } from "@/lib/admin-data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAssignableAdminUsers, getNotificationTaskFingerprint, getNotificationTaskMarkers } from "@/lib/project-management";
 import { getAdminSupportTickets, supportTopicLabels } from "@/lib/support";
 import { getAdminTasks, type TaskItem } from "@/lib/tasks";
+import { setNotificationArchived } from "./actions";
 import { NotificationTaskForm } from "./notification-task-form";
 
 type AdminNotification = TaskItem & {
@@ -61,7 +62,13 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
           type: "support",
         }))
     : [];
-  const notifications = [...supportNotifications, ...projectNotifications];
+  const allNotifications = [...supportNotifications, ...projectNotifications];
+  const { data: archivedRows } = (await createAdminClient()?.from("activity_logs").select("metadata").eq("event_type", "notification_archived")) ?? { data: [] };
+  const archivedKeys = new Set((archivedRows ?? []).map((row) => (row.metadata as { notificationKey?: string } | null)?.notificationKey).filter(Boolean));
+  const showArchived = tab === "archived";
+  const notifications = allNotifications.filter((notification) => !archivedKeys.has(notification.notificationKey));
+  const archivedNotifications = allNotifications.filter((notification) => archivedKeys.has(notification.notificationKey));
+  const shown = showArchived ? archivedNotifications : notifications;
 
   // Csak superadminnak: a rendszer által kiküldött értesítő e-mailek.
   const showEmails = adminRole === "superadmin" && tab === "emails";
@@ -96,16 +103,15 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
         <div className="projects-count">{notifications.length} értesítés</div>
       </div>
 
-      {adminRole === "superadmin" && (
-        <div className="tabs-list notification-tabs" role="tablist">
-          <Link aria-selected={!showEmails} className={`tab-button${showEmails ? "" : " active"}`} href="/admin/notifications" role="tab">Értesítések</Link>
-          <Link aria-selected={showEmails} className={`tab-button${showEmails ? " active" : ""}`} href="/admin/notifications?tab=emails" role="tab">Kiküldött e-mailek</Link>
-        </div>
-      )}
+      <div className="tabs-list notification-tabs" role="tablist">
+        <Link aria-selected={!showEmails && !showArchived} className={`tab-button${showEmails || showArchived ? "" : " active"}`} href="/admin/notifications" role="tab">Értesítések</Link>
+        <Link aria-selected={showArchived} className={`tab-button${showArchived ? " active" : ""}`} href="/admin/notifications?tab=archived" role="tab">Archivált ({archivedNotifications.length})</Link>
+        {adminRole === "superadmin" && <Link aria-selected={showEmails} className={`tab-button${showEmails ? " active" : ""}`} href="/admin/notifications?tab=emails" role="tab">Kiküldött e-mailek</Link>}
+      </div>
 
-      {showEmails ? null : notifications.length ? (
+      {showEmails ? null : shown.length ? (
         <div className="task-list notification-list">
-          {notifications.map((notification) => {
+          {shown.map((notification) => {
             const taskDescription = `Értesítésből létrehozva: ${notification.detail}`;
             return (
               <article className={`notification-card ${notification.tone}`} key={notification.id}>
@@ -126,6 +132,11 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
                   taskCreated={taskMarkers.keys.has(notification.notificationKey) || taskMarkers.fingerprints.has(getNotificationTaskFingerprint(notification.title, taskDescription))}
                   users={assignableUsers}
                 />
+                <form action={setNotificationArchived}>
+                  <input name="notificationKey" type="hidden" value={notification.notificationKey} />
+                  <input name="archive" type="hidden" value={showArchived ? "0" : "1"} />
+                  <button className="secondary-button" title={showArchived ? "Visszaállítás" : "Archiválás"} type="submit">{showArchived ? <><ArchiveRestore size={15} /> Visszaállítás</> : <><Archive size={15} /> Archiválás</>}</button>
+                </form>
                 <Link aria-label={`${notification.title} megnyitása`} className="notification-arrow-link" href={notification.href}>
                   <ArrowRight className="arrow" size={18} />
                 </Link>
@@ -137,8 +148,8 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
         <div className="empty-panel">
           <CheckCircle2 size={24} />
           <div>
-            <strong>Nincs aktuális értesítés.</strong>
-            <p>Minden ügyfélüzenet és projekt-előkészítési pont rendben van.</p>
+            <strong>{showArchived ? "Nincs archivált értesítés." : "Nincs aktuális értesítés."}</strong>
+            <p>{showArchived ? "Az archivált értesítések itt jelennek meg, és innen visszaállíthatók." : "Minden ügyfélüzenet és projekt-előkészítési pont rendben van."}</p>
           </div>
         </div>
       )}

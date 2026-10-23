@@ -2543,3 +2543,5 @@ button.task-calendar-more:hover { color: var(--teal); }
 .log-pager > div { display: flex; gap: 8px; }
 .log-pager .disabled { cursor: default; opacity: .55; }
 .log-small { font-size: 12px; }
+
+.notification-card { grid-template-columns: minmax(0, 1fr) auto auto 24px; }
