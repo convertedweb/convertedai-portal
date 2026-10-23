@@ -2535,3 +2535,10 @@ button.task-calendar-more:hover { color: var(--teal); }
 
 .notification-tabs { margin-bottom: 20px; }
 .notification-tabs-note { margin: 0 0 16px; }
+
+.stats.stats-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 760px) { .stats.stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.log-pager { align-items: center; display: flex; gap: 14px; justify-content: space-between; margin-top: 16px; }
+.log-pager > span { color: var(--muted); font-size: 12px; font-weight: 500; }
+.log-pager > div { display: flex; gap: 8px; }
+.log-pager .disabled { cursor: default; opacity: .55; }

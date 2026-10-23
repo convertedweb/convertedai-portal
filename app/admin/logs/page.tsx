@@ -182,7 +182,30 @@ async function getImpersonationLogs(): Promise<ImpersonationLogItem[]> {
   });
 }
 
-export default async function AdminLogsPage() {
+const pageSize = 15;
+const logTabs = [
+  { key: "logins", label: "Superadmin belépési napló" },
+  { key: "activity", label: "Ügyfél aktivitások" },
+  { key: "users", label: "Felhasználói belépési állapot" },
+] as const;
+
+function Pager({ page, tab, total }: { page: number; tab: string; total: number }) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (pages <= 1) return null;
+  const href = (target: number) => `/admin/logs?tab=${tab}&page=${target}`;
+  return (
+    <div className="log-pager">
+      <span>{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} / {total}</span>
+      <div>
+        {page > 1 ? <Link className="secondary-button" href={href(page - 1)}>Előző</Link> : <span className="secondary-button disabled">Előző</span>}
+        {page < pages ? <Link className="secondary-button" href={href(page + 1)}>Következő</Link> : <span className="secondary-button disabled">Következő</span>}
+      </div>
+    </div>
+  );
+}
+
+export default async function AdminLogsPage({ searchParams }: { searchParams: Promise<{ page?: string; tab?: string }> }) {
+  const params = await searchParams;
   const { canManageProjects, isAdmin, userEmail } = await getAdminCustomers();
 
   if (!isAdmin || !canManageProjects) {
@@ -201,6 +224,10 @@ export default async function AdminLogsPage() {
   }
 
   const [activityLogs, impersonationLogs, logs] = await Promise.all([getActivityLogs(), getImpersonationLogs(), getUserLogs()]);
+  const tab = logTabs.some((item) => item.key === params.tab) ? params.tab as (typeof logTabs)[number]["key"] : "logins";
+  const total = tab === "logins" ? impersonationLogs.length : tab === "activity" ? activityLogs.length : logs.length;
+  const page = Math.min(Math.max(1, Math.floor(Number(params.page)) || 1), Math.max(1, Math.ceil(total / pageSize)));
+  const visible = <T,>(items: T[]) => items.slice((page - 1) * pageSize, page * pageSize);
   const signedInUsers = logs.filter((item) => item.lastSignInAt !== "Még nem lépett be").length;
 
   return (
@@ -213,13 +240,20 @@ export default async function AdminLogsPage() {
         </div>
       </div>
 
-      <div className="stats">
+      <div className="stats stats-row">
         <div className="stat"><div className="stat-label">Ügyfél aktivitás</div><div className="stat-value">{activityLogs.length}</div></div>
         <div className="stat"><div className="stat-label">Belépés más fiókba</div><div className="stat-value">{impersonationLogs.length}</div></div>
         <div className="stat"><div className="stat-label">Listázott felhasználó</div><div className="stat-value">{logs.length}</div></div>
         <div className="stat"><div className="stat-label">Volt belépés</div><div className="stat-value">{signedInUsers}</div></div>
       </div>
 
+      <div className="tabs-list notification-tabs" role="tablist">
+        {logTabs.map((item) => (
+          <Link aria-selected={tab === item.key} className={`tab-button${tab === item.key ? " active" : ""}`} href={`/admin/logs?tab=${item.key}`} key={item.key} role="tab">{item.label}</Link>
+        ))}
+      </div>
+
+      {tab === "logins" && <>
       <div className="section-heading permissions-heading">
         <h2>Superadmin belépési napló</h2>
         <span>{impersonationLogs.length} esemény</span>
@@ -233,7 +267,7 @@ export default async function AdminLogsPage() {
           <span>Állapot</span>
           <span>Létrehozva</span>
         </div>
-        {impersonationLogs.length ? impersonationLogs.map((item) => (
+        {impersonationLogs.length ? visible(impersonationLogs).map((item) => (
           <div className="admin-table-row admin-impersonation-log-row" key={item.id}>
             <div className="customer-cell">
               <div className="customer-icon"><KeyRound size={17} /></div>
@@ -249,6 +283,10 @@ export default async function AdminLogsPage() {
         )}
       </div>
 
+      <Pager page={page} tab={tab} total={total} />
+      </>}
+
+      {tab === "activity" && <>
       <div className="section-heading permissions-heading">
         <h2>Ügyfél aktivitások</h2>
         <span>{activityLogs.length} esemény</span>
@@ -262,7 +300,7 @@ export default async function AdminLogsPage() {
           <span>Projekt</span>
           <span>Időpont</span>
         </div>
-        {activityLogs.length ? activityLogs.map((item) => (
+        {activityLogs.length ? visible(activityLogs).map((item) => (
           <div className="admin-table-row admin-activity-table-row" key={item.id}>
             <div className="customer-cell">
               <div className="customer-icon"><Activity size={17} /></div>
@@ -278,6 +316,10 @@ export default async function AdminLogsPage() {
         )}
       </div>
 
+      <Pager page={page} tab={tab} total={total} />
+      </>}
+
+      {tab === "users" && <>
       <div className="section-heading permissions-heading">
         <h2>Felhasználói belépési állapot</h2>
         <span>{logs.length} felhasználó</span>
@@ -292,7 +334,7 @@ export default async function AdminLogsPage() {
           <span>Létrehozva</span>
           <span>Frissítve</span>
         </div>
-        {logs.length ? logs.map((item) => (
+        {logs.length ? visible(logs).map((item) => (
           <div className="admin-table-row admin-logs-table-row" key={item.id}>
             <div className="customer-cell">
               <div className="customer-icon"><Users size={17} /></div>
@@ -308,6 +350,8 @@ export default async function AdminLogsPage() {
           <div className="empty-state">Még nincs listázható felhasználói aktivitás.</div>
         )}
       </div>
+      <Pager page={page} tab={tab} total={total} />
+      </>}
     </section>
   );
 }
