@@ -82,7 +82,7 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
       </div>
 
       {adminRole === "superadmin" && (
-        <div className="tabs-list" role="tablist">
+        <div className="tabs-list notification-tabs" role="tablist">
           <Link aria-selected={!showEmails} className={`tab-button${showEmails ? "" : " active"}`} href="/admin/notifications" role="tab">Értesítések</Link>
           <Link aria-selected={showEmails} className={`tab-button${showEmails ? " active" : ""}`} href="/admin/notifications?tab=emails" role="tab">Kiküldött e-mailek</Link>
         </div>
@@ -130,7 +130,7 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
 
       {showEmails && (
         <>
-          <p className="intro-copy">Az utolsó 20 értesítő e-mail, amit a rendszer ügyfeleknek vagy adminoknak küldött.</p>
+          <p className="intro-copy notification-tabs-note">Az utolsó 20 értesítő e-mail, amit a rendszer ügyfeleknek vagy adminoknak küldött.</p>
           {sentEmails.length ? (
             <div className="task-list notification-list">
               {sentEmails.map((email) => (

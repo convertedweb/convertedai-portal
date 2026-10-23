@@ -2532,3 +2532,6 @@ button.task-calendar-more:hover { color: var(--teal); }
 :root[data-theme="light"] .admin-onboarding-list a, :root[data-theme="light"] .admin-onboarding-detail a { color: var(--color-hex-3947b8); }
 :root[data-theme="light"] .admin-onboarding-dot { background: #d0d5dd; }
 :root[data-theme="light"] .admin-onboarding-dot.ok { background: #12b76a; }
+
+.notification-tabs { margin-bottom: 20px; }
+.notification-tabs-note { margin: 0 0 16px; }
