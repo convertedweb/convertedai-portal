@@ -722,6 +722,19 @@ h2 { font-size: 21px; font-weight: 500; }
 .prefixed-input input { background: var(--color-transparent); border: 0; border-radius: 0; box-shadow: none !important; min-width: 120px; padding-left: 12px; }
 .prefixed-input:focus-within { border-color: var(--teal); box-shadow: 0 0 0 3px var(--color-rgba-8-127-118-p1); }
 .settings-actions { align-items: center; border-top: 1px solid var(--color-hex-2b3447); display: flex; justify-content: space-between; margin-top: 24px; padding-top: 18px; }
+.hours-block { display: grid; gap: 4px; max-width: 460px; }
+.hours-title { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+.hours-row { align-items: center; border-top: 1px solid var(--color-hex-2b3447); display: grid; gap: 10px; grid-template-columns: 130px 110px 14px 110px; padding: 8px 0; }
+.hours-day { align-items: center; cursor: pointer; display: flex; font-size: 13px; gap: 10px; }
+.hours-day input { accent-color: var(--teal); height: 16px; margin: 0; width: 16px; }
+.hours-row input[type="time"] { background: var(--color-hex-151b28); border: 1px solid var(--line); border-radius: 5px; color: var(--ink); font: inherit; font-size: 13px; padding: 7px 9px; width: 100%; }
+.hours-row input[type="time"]:focus { border-color: var(--teal); outline: none; }
+.hours-row input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter: invert(78%) sepia(16%) saturate(1117%) hue-rotate(194deg) brightness(101%) contrast(101%); opacity: .9; }
+:root[data-theme="light"] .hours-row { border-color: var(--color-hex-d9e0ec); }
+:root[data-theme="light"] .hours-row input[type="time"] { background: var(--color-hex-ffffff); border-color: var(--color-hex-cfd7e6); color: var(--color-hex-172033); }
+:root[data-theme="light"] .hours-row input[type="time"]::-webkit-calendar-picker-indicator { filter: none; opacity: .65; }
+.hours-row > span { color: var(--muted); text-align: center; }
+@media (max-width: 640px) { .hours-row { grid-template-columns: 110px 1fr 14px 1fr; } }
 .save-note { align-items: center; color: var(--muted); display: flex; font-size: 12px; gap: 6px; }
 .save-note svg { color: var(--teal); }
 .setting-option, .access-row { align-items: center; border-top: 1px solid var(--color-hex-2b3447); display: flex; justify-content: space-between; padding: 16px 0; }

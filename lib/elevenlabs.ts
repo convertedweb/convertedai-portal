@@ -1,4 +1,5 @@
 import type { ConversationUsage } from "@/lib/usage";
+import { matchElevenLabsPhoneNumberId } from "@/lib/lead-call";
 
 type CreateElevenLabsAgentInput = {
   agentName: string;
@@ -464,4 +465,17 @@ export async function deleteElevenLabsConversation(conversationId: string) {
   }
 
   return { error: null };
+}
+
+export async function findElevenLabsPhoneNumberId(phoneNumber: string) {
+  const apiKey = getElevenLabsApiKey();
+  if (!apiKey) return null;
+
+  const response = await fetch("https://api.elevenlabs.io/v1/convai/phone-numbers", {
+    cache: "no-store",
+    headers: { "xi-api-key": apiKey },
+  });
+  if (!response.ok) return null;
+  const body: unknown = await response.json();
+  return Array.isArray(body) ? matchElevenLabsPhoneNumberId(body, phoneNumber) : null;
 }

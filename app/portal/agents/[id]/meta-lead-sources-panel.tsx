@@ -5,6 +5,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LeadSourceType } from "@/lib/lead-sources";
 import type { MetaLeadSource, MetaLeadSourcesResult } from "@/lib/meta-leads";
+import { CampaignTopicForm, LeadCallSettingsForm } from "./lead-call-settings-form";
 import { createMetaLeadSource, createWebsiteLeadSource, removeMetaLeadSource, saveMetaPageConnection, setMetaLeadSourceEnabled, type MetaLeadSourceActionState, type MetaPageConnectionActionState } from "./meta-lead-actions";
 
 const initialState: MetaLeadSourceActionState = {};
@@ -62,6 +63,8 @@ export function MetaLeadSourcesPanel({ canEdit, projectId, result }: { canEdit: 
             <span>{isWebsite ? `Oldal: ${source.websiteUrl ?? "-"}` : `Form ID: ${source.formId ?? "-"}`}</span>
             <span>Utolsó lead: {formatDateTime(source.lastLeadReceivedAt)}</span>
           </div>
+          {source.campaignTopic && <small>Kampány-téma: {source.campaignTopic}</small>}
+          {canEdit && <CampaignTopicForm projectId={projectId} sourceId={source.id} topic={source.campaignTopic} />}
         </div>
         {canEdit && (
           <div className="meta-lead-source-actions">
@@ -91,6 +94,8 @@ export function MetaLeadSourcesPanel({ canEdit, projectId, result }: { canEdit: 
         <div><span>Aktív források</span><strong>{result.sources.filter((source) => source.enabled).length}</strong></div>
         <div><span>Legutóbbi lead</span><strong>{formatDateTime(result.sources.map((source) => source.lastLeadReceivedAt).filter(Boolean).sort().at(-1) ?? null)}</strong></div>
       </div>
+
+      {canEdit && <LeadCallSettingsForm key={result.settings ? "saved" : "new"} projectId={projectId} settings={result.settings} />}
 
       <div aria-label="Lead forrás típusok" className="knowledge-tabs" role="tablist">
         <button aria-selected={activeSource === "meta_form"} className={`tab-button ${activeSource === "meta_form" ? "active" : ""}`} onClick={() => setActiveSource("meta_form")} role="tab" type="button">Meta lead űrlapok ({metaSources.length})</button>
