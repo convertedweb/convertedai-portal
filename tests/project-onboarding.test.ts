@@ -138,3 +138,25 @@ test("the phone step gates the required onboarding state", () => {
   assert.equal(getRequiredOnboardingState({ ...ready, category: "automation" } as Project, true).complete, true);
 });
 
+
+test("onboarding reminders: day schedule, deadline and missing items", async () => {
+  const { daysSince, isReminderDay, missingOnboardingItems, buildReminderEmail } = await import("../lib/onboarding-reminders");
+  const start = "2026-10-20T08:00:00Z";
+  assert.equal(daysSince(start, new Date("2026-10-23T20:00:00Z")), 3);
+  assert.equal(isReminderDay(start, new Date("2026-10-23T05:00:00Z")), true);
+  assert.equal(isReminderDay(start, new Date("2026-10-24T05:00:00Z")), false);
+  assert.equal(isReminderDay(start, new Date("2026-10-28T05:00:00Z")), true); // 8. nap: a határidő után mindennap
+  assert.match(buildReminderEmail({ daysLeft: -2, items: ["x"], projectName: "P", url: "u" }).subject, /Lejárt/);
+  const project = { ...baseProject, agentDisplayName: "Anna", greeting: "", callInstructions: "", documentList: [] } as Project;
+  assert.deepEqual(missingOnboardingItems(project, false, ["agentName", "greeting"], 0).length, 4);
+  const ready = { ...project, greeting: "Szia", phoneDocumentsReceived: true, knowledgeAssetsReceived: true } as Project;
+  assert.deepEqual(missingOnboardingItems(ready, true, ["agentName", "greeting"], 0), []);
+  assert.match(buildReminderEmail({ daysLeft: 0, items: ["x"], projectName: "P", url: "u" }).subject, /Ma lejár/);
+});
+
+test("reminder email never says onboarding", async () => {
+  const { buildReminderEmail } = await import("../lib/onboarding-reminders");
+  const email = buildReminderEmail({ daysLeft: 3, items: ["Fiókok"], projectName: "P", url: "https://x" });
+  assert.doesNotMatch(email.html + email.text + email.subject, /onboarding/i);
+  assert.match(email.html, /Fiókok/);
+});
