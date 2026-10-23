@@ -73,7 +73,7 @@ export function buildBrandedEmail({ actionLabel, details, emailSubject, intro, m
 // A sikeres küldést a record megadásakor naplózzuk (activity_logs, "email_sent"), hogy a superadmin az Értesítések oldalon lássa.
 export type EmailRecord = { organizationId: string; projectId?: string | null };
 
-async function recordSentEmail(record: EmailRecord, subject: string, recipients: EmailRecipient[]) {
+async function recordSentEmail(record: EmailRecord, subject: string, recipients: EmailRecipient[], resendId: string | null) {
   try {
     // Késleltetett import, hogy a tiszta (tesztelt) e-mail sablonok ne húzzák be a Supabase klienst.
     const { createAdminClient } = await import("./supabase/admin");
@@ -83,6 +83,7 @@ async function recordSentEmail(record: EmailRecord, subject: string, recipients:
       actor_role: "system",
       description: recipients.map((recipient) => recipient.email).join(", "),
       event_type: "email_sent",
+      metadata: { resend_id: resendId },
       organization_id: record.organizationId,
       project_id: record.projectId ?? null,
       title: subject,
@@ -110,6 +111,9 @@ export async function sendNotificationEmail({ html, record, subject, text, to }:
     console.error("Email notification send failed", await response.text());
     return { sent: false };
   }
-  if (record) await recordSentEmail(record, subject, recipients);
+  if (record) {
+    const { id } = (await response.json().catch(() => ({}))) as { id?: string };
+    await recordSentEmail(record, subject, recipients, id ?? null);
+  }
   return { sent: true };
 }

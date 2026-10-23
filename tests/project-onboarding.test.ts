@@ -160,3 +160,19 @@ test("reminder email never says onboarding", async () => {
   assert.doesNotMatch(email.html + email.text + email.subject, /onboarding/i);
   assert.match(email.html, /Fiókok/);
 });
+
+test("resend webhook signature verification", async () => {
+  const { createHmac } = await import("node:crypto");
+  const { verifyResendSignature } = await import("../lib/resend-webhook");
+  const secret = `whsec_${Buffer.from("test-secret").toString("base64")}`;
+  const now = Date.now();
+  const timestamp = String(Math.floor(now / 1000));
+  const body = '{"type":"email.clicked"}';
+  const sign = (b: string) => `v1,${createHmac("sha256", Buffer.from("test-secret")).update(`msg_1.${timestamp}.${b}`).digest("base64")}`;
+  const input = { body, id: "msg_1", now, secret, signature: sign(body), timestamp };
+  assert.equal(verifyResendSignature(input), true);
+  assert.equal(verifyResendSignature({ ...input, body: body + " " }), false);
+  assert.equal(verifyResendSignature({ ...input, signature: "v1,AAAA" }), false);
+  assert.equal(verifyResendSignature({ ...input, now: now + 10 * 60 * 1000 }), false);
+  assert.equal(verifyResendSignature({ ...input, secret: undefined }), false);
+});

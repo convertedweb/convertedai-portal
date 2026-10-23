@@ -66,8 +66,15 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
   // Csak superadminnak: a rendszer által kiküldött értesítő e-mailek.
   const showEmails = adminRole === "superadmin" && tab === "emails";
   const sentEmails = showEmails
-    ? ((await createAdminClient()?.from("activity_logs").select("id, title, description, created_at, project_id").eq("event_type", "email_sent").order("created_at", { ascending: false }).limit(20))?.data ?? [])
+    ? ((await createAdminClient()?.from("activity_logs").select("id, title, description, created_at, project_id, metadata").eq("event_type", "email_sent").order("created_at", { ascending: false }).limit(20))?.data ?? [])
     : [];
+  const clickedAt = new Map<string, string>(
+    showEmails
+      ? ((await createAdminClient()?.from("activity_logs").select("created_at, metadata").eq("event_type", "email_clicked").order("created_at", { ascending: false }).limit(200))?.data ?? [])
+          .map((row) => [(row.metadata as { resend_id?: string } | null)?.resend_id ?? "", row.created_at as string] as [string, string])
+      : [],
+  );
+  const dateTime = (value: string) => new Intl.DateTimeFormat("hu-HU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
   const projectNames = new Map(projects.map((project) => [project.id, project.name]));
 
   return (
@@ -139,7 +146,7 @@ export default async function AdminNotificationsPage({ searchParams }: { searchP
                     <div className="task-icon"><Mail size={18} /></div>
                     <div>
                       <strong>{email.title}</strong>
-                      <span>{[email.project_id ? projectNames.get(email.project_id) : null, email.description, new Intl.DateTimeFormat("hu-HU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(email.created_at))].filter(Boolean).join(" · ")}</span>
+                      <span>{[email.project_id ? projectNames.get(email.project_id) : null, email.description, dateTime(email.created_at), clickedAt.has((email.metadata as { resend_id?: string } | null)?.resend_id ?? "") ? `Rákattintott: ${dateTime(clickedAt.get((email.metadata as { resend_id: string }).resend_id) as string)}` : null].filter(Boolean).join(" · ")}</span>
                     </div>
                   </div>
                 </article>
