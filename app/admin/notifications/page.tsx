@@ -1,6 +1,7 @@
-import { ArrowRight, Bell, CheckCircle2, CirclePause, MessageSquareText } from "lucide-react";
+import { ArrowRight, Bell, CheckCircle2, CirclePause, Mail, MessageSquareText } from "lucide-react";
 import Link from "next/link";
 import { getAdminProjects } from "@/lib/admin-data";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getAssignableAdminUsers, getNotificationTaskFingerprint, getNotificationTaskMarkers } from "@/lib/project-management";
 import { getAdminSupportTickets, supportTopicLabels } from "@/lib/support";
 import { getAdminTasks, type TaskItem } from "@/lib/tasks";
@@ -14,7 +15,7 @@ type AdminNotification = TaskItem & {
 };
 
 export default async function AdminNotificationsPage() {
-  const { isAdmin, projects, userEmail } = await getAdminProjects();
+  const { adminRole, isAdmin, projects, userEmail } = await getAdminProjects();
 
   if (!isAdmin) {
     return (
@@ -60,6 +61,12 @@ export default async function AdminNotificationsPage() {
         }))
     : [];
   const notifications = [...supportNotifications, ...projectNotifications];
+
+  // Csak superadminnak: a rendszer által kiküldött értesítő e-mailek.
+  const sentEmails = adminRole === "superadmin"
+    ? ((await createAdminClient()?.from("activity_logs").select("id, title, description, created_at, project_id").eq("event_type", "email_sent").order("created_at", { ascending: false }).limit(20))?.data ?? [])
+    : [];
+  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
 
   return (
     <section className="content">
@@ -110,6 +117,32 @@ export default async function AdminNotificationsPage() {
             <p>Minden ügyfélüzenet és projekt-előkészítési pont rendben van.</p>
           </div>
         </div>
+      )}
+
+      {adminRole === "superadmin" && (
+        <>
+          <div className="page-intro">
+            <div>
+              <h2>Kiküldött e-mailek</h2>
+              <p className="intro-copy">Az utolsó 20 értesítő e-mail, amit a rendszer ügyfeleknek vagy adminoknak küldött.</p>
+            </div>
+          </div>
+          {sentEmails.length ? (
+            <div className="task-list notification-list">
+              {sentEmails.map((email) => (
+                <article className="notification-card info" key={email.id}>
+                  <div className="notification-card-link">
+                    <div className="task-icon"><Mail size={18} /></div>
+                    <div>
+                      <strong>{email.title}</strong>
+                      <span>{[email.project_id ? projectNames.get(email.project_id) : null, email.description, new Intl.DateTimeFormat("hu-HU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(email.created_at))].filter(Boolean).join(" · ")}</span>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : <p className="intro-copy">Még nem ment ki értesítő e-mail.</p>}
+        </>
       )}
     </section>
   );

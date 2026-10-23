@@ -72,7 +72,7 @@ async function run(request: Request) {
     if (dry) { results.push({ project: row.id, sent: 0, reason: "dry_run", missing }); continue; }
 
     const email = buildReminderEmail({ daysLeft: onboardingDeadlineDays - daysSince(start), items: missing, projectName: row.name, url: `${getSiteUrl()}/portal/projects/${row.id}/onboarding` });
-    const { sent } = await sendNotificationEmail({ ...email, to: recipients });
+    const { sent } = await sendNotificationEmail({ ...email, record: { organizationId: row.organization_id, projectId: row.id }, to: recipients });
     results.push({ project: row.id, sent: sent ? recipients.length : 0, missing });
   }
   return Response.json({ results });

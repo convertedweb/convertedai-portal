@@ -118,8 +118,8 @@ export async function notifySupportTicket(input: TicketNotificationInput) {
     const customerCopy = buildNotificationCopy(input, "customer");
 
     await Promise.all([
-      sendNotificationEmail({ ...adminCopy, to: adminRecipients }),
-      sendNotificationEmail({ ...customerCopy, to: customerRecipients }),
+      sendNotificationEmail({ ...adminCopy, record: { organizationId: input.organizationId }, to: adminRecipients }),
+      sendNotificationEmail({ ...customerCopy, record: { organizationId: input.organizationId }, to: customerRecipients }),
     ]);
   } catch (error) {
     console.error("Support notification failed", error);

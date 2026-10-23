@@ -70,7 +70,30 @@ export function buildBrandedEmail({ actionLabel, details, emailSubject, intro, m
   return { html, subject, text };
 }
 
-export async function sendNotificationEmail({ html, subject, text, to }: { html: string; subject: string; text: string; to: EmailRecipient[] }) {
+// A sikeres küldést a record megadásakor naplózzuk (activity_logs, "email_sent"), hogy a superadmin az Értesítések oldalon lássa.
+export type EmailRecord = { organizationId: string; projectId?: string | null };
+
+async function recordSentEmail(record: EmailRecord, subject: string, recipients: EmailRecipient[]) {
+  try {
+    // Késleltetett import, hogy a tiszta (tesztelt) e-mail sablonok ne húzzák be a Supabase klienst.
+    const { createAdminClient } = await import("./supabase/admin");
+    const adminSupabase = createAdminClient();
+    if (!adminSupabase) return;
+    const { error } = await adminSupabase.from("activity_logs").insert({
+      actor_role: "system",
+      description: recipients.map((recipient) => recipient.email).join(", "),
+      event_type: "email_sent",
+      organization_id: record.organizationId,
+      project_id: record.projectId ?? null,
+      title: subject,
+    });
+    if (error) console.error("Email activity log failed", error);
+  } catch (error) {
+    console.error("Email activity log failed", error);
+  }
+}
+
+export async function sendNotificationEmail({ html, record, subject, text, to }: { html: string; record?: EmailRecord; subject: string; text: string; to: EmailRecipient[] }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.NOTIFICATION_EMAIL_FROM ?? process.env.SUPPORT_EMAIL_FROM;
   const recipients = uniqueRecipients(to);
@@ -87,5 +110,6 @@ export async function sendNotificationEmail({ html, subject, text, to }: { html:
     console.error("Email notification send failed", await response.text());
     return { sent: false };
   }
+  if (record) await recordSentEmail(record, subject, recipients);
   return { sent: true };
 }
